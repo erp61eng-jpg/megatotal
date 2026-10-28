@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import requests
 from itertools import combinations, product
 from collections import Counter
+import math
 import time
 
 st.set_page_config(
@@ -70,7 +71,7 @@ OPCOES_QUANTIDADE = {
 # MOTOR MATEMÁTICO POR PARTICIONAMENTO EFICIENTE
 # ==============================================================================
 def gerar_particoes_linha(limites_linhas, alvo=6):
-    """Gera todas as distribuições (k0, k1, k2, k3, k4, k5) onde sum(k) == 6."""
+    """Gera todas as distribuições (k0..k5) onde sum(k) == 6 respeitando limites."""
     val_ranges = [list(range(limites_linhas[i][0], limites_linhas[i][1] + 1)) for i in range(6)]
     particoes = []
     
@@ -93,14 +94,13 @@ def gerar_particoes_linha(limites_linhas, alvo=6):
 def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metricas):
     t_inicio = time.time()
     
-    # 1. Filtra as dezenas disponíveis por linha eliminando colunas/diagonais proibidas (máx = 0)
+    # 1. Filtra as dezenas disponíveis eliminando colunas/diagonais travadas em 0
     dezenas_por_linha = []
     for r in range(6):
         dezenas_l = []
         for c in range(10):
             n = r * 10 + c + 1
             prop = PROPS[n]
-            # Descarta dezena se sua coluna ou diagonal estiver travada em 0
             if cfg["colunas"][prop["c"]][1] == 0:
                 continue
             if cfg["diag_cresc"][prop["dc"]][1] == 0:
@@ -114,11 +114,10 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
     particoes = gerar_particoes_linha(cfg["linhas"], alvo=6)
     
     if not particoes:
-        container_status.error("Combinação impossível: Os limites mínimos e máximos das linhas não somam 6.")
+        container_status.error("Combinação impossível: Os limites das linhas não somam 6.")
         return []
 
-    # 3. Calcula o total exato de combinações que serão geradas
-    import math
+    # 3. Cálculo exato do universo
     total_combinacoes = 0
     particoes_viaveis = []
     for part in particoes:
@@ -136,18 +135,18 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
             total_combinacoes += comb_part
 
     if total_combinacoes == 0:
-        container_status.error("Nenhuma combinação viável com as restrições individuais escolhidas.")
+        container_status.error("Nenhuma combinação viável com as restrições individuais configuradas.")
         return []
 
     container_status.write(
-        f"📊 **Plano de Varredura:** {len(particoes_viaveis)} partições de linhas identificadas. "
-        f"Universo exato a inspecionar: **{total_combinacoes:,} jogos**."
+        f"📊 **Plano de Execução:** {len(particoes_viaveis)} partições válidas de linhas. "
+        f"Universo real a inspecionar: **{total_combinacoes:,} jogos**."
     )
 
-    # 4. Loop de Execução com a Linha de Acompanhamento de Serviço
+    # 4. Loop de Execução com Linha de Serviço
     jogos_aprovados = []
     testadas = 0
-    lote_update = max(1000, total_combinacoes // 80)
+    lote_update = max(1, min(1000, total_combinacoes // 50))
     
     cfg_col = cfg["colunas"]
     cfg_dc = cfg["diag_cresc"]
@@ -163,7 +162,6 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
         for combinacao_fatiada in product(*geradores_linha):
             testadas += 1
             
-            # Reconstrói a aposta de 6 números
             jogo = []
             for pedaco in combinacao_fatiada:
                 jogo.extend(pedaco)
@@ -188,7 +186,7 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
             if moldura_cnt not in moldura_aceita:
                 continue
 
-            # Teste 5: Colunas Individuais
+            # Teste 5: Colunas e Diagonais
             cols_count = [0] * 10
             dc_count = [0] * 10
             dd_count = [0] * 10
@@ -217,7 +215,7 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
             if not valido:
                 continue
 
-            # Verifica mínimos por coluna e diagonal
+            # Verifica limites mínimos
             for c in range(10):
                 if cols_count[c] < cfg_col[c][0]:
                     valido = False
@@ -234,7 +232,6 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
 
             jogos_aprovados.append(jogo)
 
-            # Atualização visual da Linha de Serviço
             if testadas % lote_update == 0:
                 prog = testadas / total_combinacoes
                 bar_progresso.progress(prog)
@@ -247,6 +244,12 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
                 )
 
     bar_progresso.progress(1.0)
+    delta_final = max(0.001, time.time() - t_inicio)
+    ticker_metricas.markdown(
+        f"**Linha de Serviço:** `{testadas:,}` testadas | "
+        f"Aprovados: `{len(jogos_aprovados):,}` | "
+        f"Tempo total: `{delta_final:.2f}s`"
+    )
     return jogos_aprovados
 
 # ==============================================================================
@@ -254,7 +257,7 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
 # ==============================================================================
 if "historico" not in st.session_state:
     st.session_state.historico = [list(j) for j in FALLBACK_MEGASENA]
-    st.session_state.origem = "Base Local Offline (Carregamento Rápido)"
+    st.session_state.origem = "Base Local Offline (Carregamento Imediato)"
 
 if "jogos_aprovados" not in st.session_state:
     st.session_state.jogos_aprovados = []
@@ -280,7 +283,6 @@ with tab_config:
     # QUADRO 1: LINHAS INDIVIDUAIS (L01 a L06)
     with st.container(border=True):
         st.markdown("#### 1️⃣ Configuração Individual das 6 Linhas")
-        st.caption("Defina individualmente quantas dezenas cada linha deve conter (ex: Linha 1 = 2 números, Linha 4 = 1 número).")
         cols_l = st.columns(6)
         limites_linhas = []
         opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
@@ -298,7 +300,6 @@ with tab_config:
     # QUADRO 2: COLUNAS INDIVIDUAIS (C01 a C10)
     with st.container(border=True):
         st.markdown("#### 2️⃣ Configuração Individual das 10 Colunas")
-        st.caption("Defina se uma coluna deve ter 0, 1, 2, 3 ou quantidade livre de dezenas.")
         cols_c_up = st.columns(5)
         cols_c_dw = st.columns(5)
         limites_colunas = []
@@ -315,7 +316,7 @@ with tab_config:
                 )
                 limites_colunas.append(OPCOES_QUANTIDADE[escolha_c])
 
-    # QUADRO 3: DIAGONAIS INDIVIDUAIS (CRESCENTES E DECRESCENTES)
+    # QUADRO 3: DIAGONAIS INDIVIDUAIS
     c_diag1, c_diag2 = st.columns(2)
     with c_diag1:
         with st.container(border=True):
@@ -362,7 +363,6 @@ with tab_config:
         with c_p4:
             faixa_soma = st.slider("Faixa de Soma:", 50, 320, (110, 240))
 
-    # Consolida a configuração
     config_total = {
         "linhas": limites_linhas,
         "colunas": limites_colunas,
@@ -381,7 +381,7 @@ with tab_config:
     # ==============================================================================
     st.markdown("### 📡 Linha de Acompanhamento de Serviço")
     placeholder_metricas = st.empty()
-    barra_progresso = st.progress(0, text="Aguardando início do serviço...")
+    barra_progresso = st.progress(0, text="Aguardando comando de execução...")
 
     if st.button("🚀 Iniciar Varredura com Parâmetros Granulares", use_container_width=True):
         if not primos_sel:
@@ -406,13 +406,13 @@ with tab_config:
                 
                 if total_gerado > 0:
                     status_box.update(
-                        label=f"✅ Serviço Finalizado com Sucesso! {total_gerado:,} jogos encontrados em {t_fim:.2f}s.",
+                        label=f"✅ Serviço Finalizado! {total_gerado:,} jogos encontrados em {t_fim:.2f}s.",
                         state="complete",
                         expanded=False
                     )
                 else:
                     status_box.update(
-                        label=f"⚠️ Processamento finalizado em {t_fim:.2f}s, mas nenhuma aposta atende todos os critérios configurados.",
+                        label=f"⚠️ Finalizado em {t_fim:.2f}s, mas nenhuma aposta atende todos os critérios configurados.",
                         state="error",
                         expanded=True
                     )
@@ -453,7 +453,16 @@ with tab_config:
 with tab_volante:
     st.subheader("Dissecação da Cartela Oficial")
     if st.session_state.jogos_aprovados:
-        sel_idx = st.slider("Escolha a aposta para inspecionar:", 1, len(st.session_state.jogos_aprovados), 1)
+        total_jogos = len(st.session_state.jogos_aprovados)
+        
+        # CORREÇÃO DO ERRO StreamlitInvalidMinMaxError:
+        # Se houver apenas 1 jogo aprovado, fixa sel_idx = 1 sem criar slider inválido
+        if total_jogos > 1:
+            sel_idx = st.slider("Escolha a aposta para inspecionar:", 1, total_jogos, 1)
+        else:
+            sel_idx = 1
+            st.info("ℹ️ Exibindo a única aposta encontrada pelos filtros.")
+            
         jogo_ativo = st.session_state.jogos_aprovados[sel_idx - 1]
         marcadas = set(jogo_ativo)
 
