@@ -13,10 +13,9 @@ st.set_page_config(
 )
 
 TOTAL_NUMS = 60
-TAMANHO_JOGO = 6
+TAMANHO_JOGO_FINAL = 6
 PRIMOS_MEGASENA = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59}
 
-# 28 Dezenas Periféricas (Moldura da matriz 6x10)
 MOLDURA_SET = (
     set(range(1, 11)) | 
     set(range(51, 61)) | 
@@ -39,10 +38,10 @@ FALLBACK_MEGASENA = [
 # ==============================================================================
 PROPS = {}
 for n in range(1, 61):
-    r = (n - 1) // 10       # Linha 0 a 5
-    c = (n - 1) % 10        # Coluna 0 a 9
-    dc = (c + r) % 10       # Diag Crescente 0 a 9
-    dd = (c - r) % 10       # Diag Decrescente 0 a 9
+    r = (n - 1) // 10
+    c = (n - 1) % 10
+    dc = (c + r) % 10
+    dd = (c - r) % 10
     PROPS[n] = {
         "r": r,
         "c": c,
@@ -68,33 +67,80 @@ OPCOES_QUANTIDADE = {
 }
 
 # ==============================================================================
-# MOTOR MATEMÁTICO POR PARTICIONAMENTO EFICIENTE
+# MOTOR COMBINATÓRIO COM DESDOBRAMENTO AUTOMÁTICO PARA 6 NÚMEROS
 # ==============================================================================
-def gerar_particoes_linha(limites_linhas, alvo=6):
-    """Gera todas as distribuições (k0..k5) onde sum(k) == 6 respeitando limites."""
+def validar_jogo_6(jogo, cfg):
+    """Testa se uma aposta final de 6 dezenas atende todos os critérios."""
+    soma_j = sum(jogo)
+    if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
+        return False
+
+    primos_cnt = sum(1 for n in jogo if PROPS[n]["is_primo"])
+    if primos_cnt not in cfg["primos_aceitos"]:
+        return False
+
+    pares_cnt = sum(1 for n in jogo if PROPS[n]["is_par"])
+    if pares_cnt not in cfg["pares_aceitos"]:
+        return False
+
+    moldura_cnt = sum(1 for n in jogo if PROPS[n]["is_moldura"])
+    if moldura_cnt not in cfg["moldura_aceita"]:
+        return False
+
+    cols_count = [0] * 10
+    dc_count = [0] * 10
+    dd_count = [0] * 10
+
+    for n in jogo:
+        p = PROPS[n]
+        c_idx, dc_idx, dd_idx = p["c"], p["dc"], p["dd"]
+
+        cols_count[c_idx] += 1
+        if cols_count[c_idx] > cfg["colunas"][c_idx][1]:
+            return False
+
+        dc_count[dc_idx] += 1
+        if dc_count[dc_idx] > cfg["diag_cresc"][dc_idx][1]:
+            return False
+
+        dd_count[dd_idx] += 1
+        if dd_count[dd_idx] > cfg["diag_decresc"][dd_idx][1]:
+            return False
+
+    for c in range(10):
+        if cols_count[c] < cfg["colunas"][c][0]:
+            return False
+
+    for d in range(10):
+        if dc_count[d] < cfg["diag_cresc"][d][0] or dd_count[d] < cfg["diag_decresc"][d][0]:
+            return False
+
+    return True
+
+def gerar_particoes(limites_linhas, alvo):
+    """Calcula todas as distribuições de dezenas por linha que somam o valor alvo."""
     val_ranges = [list(range(limites_linhas[i][0], limites_linhas[i][1] + 1)) for i in range(6)]
     particoes = []
     
-    def backtrack(idx, soma_acumulada, tupla_atual):
+    def backtrack(idx, soma_acum, tupla_atual):
         if idx == 6:
-            if soma_acumulada == alvo:
+            if soma_acum == alvo:
                 particoes.append(tupla_atual)
             return
         min_restante = sum(limites_linhas[j][0] for j in range(idx + 1, 6))
         max_restante = sum(limites_linhas[j][1] for j in range(idx + 1, 6))
-        
         for qtd in val_ranges[idx]:
-            nova_soma = soma_acumulada + qtd
+            nova_soma = soma_acum + qtd
             if nova_soma + min_restante <= alvo <= nova_soma + max_restante:
                 backtrack(idx + 1, nova_soma, tupla_atual + (qtd,))
 
     backtrack(0, 0, ())
     return particoes
 
-def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metricas):
+def motor_executar_servico(cfg, bar_progresso, container_status, ticker_metricas):
     t_inicio = time.time()
     
-    # 1. Filtra as dezenas disponíveis eliminando colunas/diagonais travadas em 0
+    # 1. Filtra dezenas disponíveis por linha
     dezenas_por_linha = []
     for r in range(6):
         dezenas_l = []
@@ -110,16 +156,34 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
             dezenas_l.append(n)
         dezenas_por_linha.append(dezenas_l)
 
-    # 2. Partições válidas entre as 6 linhas
-    particoes = gerar_particoes_linha(cfg["linhas"], alvo=6)
+    # 2. Avalia a meta das linhas
+    min_linhas = sum(l[0] for l in cfg["linhas"])
+    max_linhas = sum(l[1] for l in cfg["linhas"])
+    
+    modo_desdobramento = False
+    
+    if min_linhas == max_linhas and min_linhas > 6:
+        alvo_busca = min_linhas
+        modo_desdobramento = True
+        container_status.write(
+            f"🔄 **Modo Desdobramento Ativado:** Sua seleção define grupos de **{alvo_busca} dezenas**. "
+            f"O sistema irá gerar esses grupos estruturais e **desdobrá-los automaticamente em apostas oficiais de 6 dezenas**!"
+        )
+    else:
+        alvo_busca = 6
+        container_status.write("⚡ **Modo Direto Ativado:** Gerando combinações diretamente no formato oficial de 6 dezenas.")
+
+    particoes = gerar_particoes(cfg["linhas"], alvo=alvo_busca)
     
     if not particoes:
-        container_status.error("Combinação impossível: Os limites das linhas não somam 6.")
+        container_status.error(
+            f"Não há como compor combinações com a configuração atual das linhas. "
+            f"Ajuste os valores para permitir que as linhas somem pelo menos 6 dezenas."
+        )
         return []
 
-    # 3. Cálculo exato do universo
-    total_combinacoes = 0
     particoes_viaveis = []
+    total_estimado = 0
     for part in particoes:
         possivel = True
         comb_part = 1
@@ -132,128 +196,63 @@ def motor_varredura_individual(cfg, bar_progresso, container_status, ticker_metr
             comb_part *= math.comb(n_disp, k)
         if possivel and comb_part > 0:
             particoes_viaveis.append(part)
-            total_combinacoes += comb_part
+            total_estimado += comb_part
 
-    if total_combinacoes == 0:
-        container_status.error("Nenhuma combinação viável com as restrições individuais configuradas.")
+    if total_estimado == 0:
+        container_status.error("Nenhuma dezena disponível atende às colunas e diagonais configuradas para essas linhas.")
         return []
 
     container_status.write(
-        f"📊 **Plano de Execução:** {len(particoes_viaveis)} partições válidas de linhas. "
-        f"Universo real a inspecionar: **{total_combinacoes:,} jogos**."
+        f"📊 **Plano de Varredura:** {len(particoes_viaveis)} partições de linhas identificadas. "
+        f"Universo base a inspecionar: **{total_estimado:,} matrizes**."
     )
 
-    # 4. Loop de Execução com Linha de Serviço
-    jogos_aprovados = []
+    jogos_6_finais = set()
     testadas = 0
-    lote_update = max(1, min(1000, total_combinacoes // 50))
-    
-    cfg_col = cfg["colunas"]
-    cfg_dc = cfg["diag_cresc"]
-    cfg_dd = cfg["diag_decresc"]
-    soma_min, soma_max = cfg["faixa_soma"]
-    pares_aceitos = cfg["pares_aceitos"]
-    primos_aceitos = cfg["primos_aceitos"]
-    moldura_aceita = cfg["moldura_aceita"]
+    lote_update = max(1, min(1000, total_estimado // 50))
 
     for part in particoes_viaveis:
-        geradores_linha = [combinations(dezenas_por_linha[r], part[r]) for r in range(6)]
+        geradores = [combinations(dezenas_por_linha[r], part[r]) for r in range(6)]
         
-        for combinacao_fatiada in product(*geradores_linha):
+        for pedacos in product(*geradores):
             testadas += 1
-            
-            jogo = []
-            for pedaco in combinacao_fatiada:
-                jogo.extend(pedaco)
+            matriz_candidata = []
+            for p in pedacos:
+                matriz_candidata.extend(p)
 
-            # Teste 1: Soma Geral
-            soma_j = sum(jogo)
-            if not (soma_min <= soma_j <= soma_max):
-                continue
-
-            # Teste 2: Primos
-            primos_cnt = sum(1 for n in jogo if PROPS[n]["is_primo"])
-            if primos_cnt not in primos_aceitos:
-                continue
-
-            # Teste 3: Pares
-            pares_cnt = sum(1 for n in jogo if PROPS[n]["is_par"])
-            if pares_cnt not in pares_aceitos:
-                continue
-
-            # Teste 4: Moldura
-            moldura_cnt = sum(1 for n in jogo if PROPS[n]["is_moldura"])
-            if moldura_cnt not in moldura_aceita:
-                continue
-
-            # Teste 5: Colunas e Diagonais
-            cols_count = [0] * 10
-            dc_count = [0] * 10
-            dd_count = [0] * 10
-            valido = True
-
-            for n in jogo:
-                prop = PROPS[n]
-                c_idx = prop["c"]
-                cols_count[c_idx] += 1
-                if cols_count[c_idx] > cfg_col[c_idx][1]:
-                    valido = False
-                    break
-                
-                dc_idx = prop["dc"]
-                dc_count[dc_idx] += 1
-                if dc_count[dc_idx] > cfg_dc[dc_idx][1]:
-                    valido = False
-                    break
-
-                dd_idx = prop["dd"]
-                dd_count[dd_idx] += 1
-                if dd_count[dd_idx] > cfg_dd[dd_idx][1]:
-                    valido = False
-                    break
-
-            if not valido:
-                continue
-
-            # Verifica limites mínimos
-            for c in range(10):
-                if cols_count[c] < cfg_col[c][0]:
-                    valido = False
-                    break
-            if not valido:
-                continue
-
-            for d in range(10):
-                if dc_count[d] < cfg_dc[d][0] or dd_count[d] < cfg_dd[d][0]:
-                    valido = False
-                    break
-            if not valido:
-                continue
-
-            jogos_aprovados.append(jogo)
+            # Se for modo direto (6 dezenas)
+            if not modo_desdobramento:
+                if validar_jogo_6(matriz_candidata, cfg):
+                    jogos_6_finais.add(tuple(sorted(matriz_candidata)))
+            # Se for modo desdobramento (> 6 dezenas), desdobra a matriz em jogos de 6
+            else:
+                for sub_jogo in combinations(matriz_candidata, 6):
+                    if validar_jogo_6(sub_jogo, cfg):
+                        jogos_6_finais.add(tuple(sorted(sub_jogo)))
 
             if testadas % lote_update == 0:
-                prog = testadas / total_combinacoes
+                prog = testadas / total_estimado
                 bar_progresso.progress(prog)
                 delta_t = max(0.001, time.time() - t_inicio)
                 velocidade = int(testadas / delta_t)
                 ticker_metricas.markdown(
-                    f"**Linha de Serviço:** `{testadas:,}` de `{total_combinacoes:,}` ({prog*100:.1f}%) | "
-                    f"Aprovados: `{len(jogos_aprovados):,}` | "
-                    f"Velocidade: `{velocidade:,} comb/s` | Tempo: `{delta_t:.2f}s`"
+                    f"**Linha de Serviço:** `{testadas:,}` de `{total_estimado:,}` ({prog*100:.1f}%) | "
+                    f"Apostas de 6 dezenas geradas: `{len(jogos_6_finais):,}` | "
+                    f"Velocidade: `{velocidade:,} matrizes/s` | Tempo: `{delta_t:.2f}s`"
                 )
 
     bar_progresso.progress(1.0)
     delta_final = max(0.001, time.time() - t_inicio)
     ticker_metricas.markdown(
-        f"**Linha de Serviço:** `{testadas:,}` testadas | "
-        f"Aprovados: `{len(jogos_aprovados):,}` | "
+        f"**Linha de Serviço:** `{testadas:,}` matrizes processadas | "
+        f"Aprovados finais: `{len(jogos_6_finais):,}` jogos de 6 dezenas | "
         f"Tempo total: `{delta_final:.2f}s`"
     )
-    return jogos_aprovados
+    
+    return [list(j) for j in sorted(list(jogos_6_finais))]
 
 # ==============================================================================
-# INICIALIZAÇÃO DE ESTADO
+# INICIALIZAÇÃO
 # ==============================================================================
 if "historico" not in st.session_state:
     st.session_state.historico = [list(j) for j in FALLBACK_MEGASENA]
@@ -263,24 +262,21 @@ if "jogos_aprovados" not in st.session_state:
     st.session_state.jogos_aprovados = []
 
 # ==============================================================================
-# CABEÇALHO & ABAS PRINCIPAIS
+# INTERFACE PRINCIPAL
 # ==============================================================================
-st.title("🍀 MEGA60: Seleção Individual de Linhas, Colunas e Diagonais")
-st.caption("Filtros Granulares Elemento por Elemento • Varredura Completa com Acompanhamento de Serviço")
+st.title("🍀 MEGA60: Seleção Individual & Desdobrador Automático")
+st.caption("Você define a estratégia das Linhas, Colunas e Diagonais • O sistema desdobra e entrega jogos de SEMPRE 6 Números")
 
 tab_config, tab_volante, tab_historico = st.tabs([
-    "🎛️ Configuração Individual dos Quadros",
-    "🗺️ Volante Visual & Raio-X do Jogo",
+    "🎛️ Configuração dos Quadros",
+    "🗺️ Volante Visual & Raio-X",
     "📊 Histórico & Conexão Caixa"
 ])
 
-# ==============================================================================
-# ABA 1: CONFIGURAÇÃO INDIVIDUAL
-# ==============================================================================
 with tab_config:
-    st.markdown("### 🎛️ Defina a Quantidade Exata para Cada Linha, Coluna e Diagonal")
-    
-    # QUADRO 1: LINHAS INDIVIDUAIS (L01 a L06)
+    st.markdown("### 🎛️ Defina as Quantidades Individuais para Cada Elemento")
+
+    # QUADRO 1: LINHAS INDIVIDUAIS
     with st.container(border=True):
         st.markdown("#### 1️⃣ Configuração Individual das 6 Linhas")
         cols_l = st.columns(6)
@@ -297,7 +293,22 @@ with tab_config:
                 )
                 limites_linhas.append(OPCOES_QUANTIDADE[escolha_l])
 
-    # QUADRO 2: COLUNAS INDIVIDUAIS (C01 a C10)
+        soma_min_linhas = sum(l[0] for l in limites_linhas)
+        soma_max_linhas = sum(l[1] for l in limites_linhas)
+
+        if soma_min_linhas == soma_max_linhas == 6:
+            st.info("ℹ️ **Modo Direto:** Suas linhas somam exatamente 6. Cada combinação gerada formará 1 aposta direta.")
+        elif soma_min_linhas == soma_max_linhas and soma_min_linhas > 6:
+            st.success(
+                f"🎯 **Desdobramento Automático Ativo:** Suas linhas definem uma matriz de **{soma_min_linhas} dezenas** "
+                f"(ex.: 2-1-1-1-1-2). O sistema vai gerar essas matrizes e **desdobrá-las em apostas de 6 dezenas**."
+            )
+        elif soma_min_linhas <= 6 <= soma_max_linhas:
+            st.info(f"ℹ️ **Modo Flexível:** As linhas permitem entre {soma_min_linhas} e {soma_max_linhas} dezenas. O sistema extrairá jogos de 6 dezenas respeitando esses limites.")
+        else:
+            st.warning(f"⚠️ A soma mínima configurada ({soma_min_linhas}) é menor que 6. O sistema buscará combinações válidas de 6 dezenas.")
+
+    # QUADRO 2: COLUNAS INDIVIDUAIS
     with st.container(border=True):
         st.markdown("#### 2️⃣ Configuração Individual das 10 Colunas")
         cols_c_up = st.columns(5)
@@ -321,33 +332,33 @@ with tab_config:
     with c_diag1:
         with st.container(border=True):
             st.markdown("#### 3️⃣ Diagonais Crescentes (DC01 a DC10 /)")
-            with st.expander("Abrir Controle das 10 Diagonais Crescentes", expanded=False):
+            with st.expander("Abrir Controle das Diagonais Crescentes", expanded=False):
                 limites_dc = []
                 for d in range(10):
                     escolha_dc = st.selectbox(
                         f"Diag Crescente DC{d+1:02d}",
                         opcoes_nomes,
-                        index=6,  # "0 ou 1"
+                        index=6,
                         key=f"sel_dc_{d}"
                     )
                     limites_dc.append(OPCOES_QUANTIDADE[escolha_dc])
     with c_diag2:
         with st.container(border=True):
             st.markdown("#### 4️⃣ Diagonais Decrescentes (DD01 a DD10 \\)")
-            with st.expander("Abrir Controle das 10 Diagonais Decrescentes", expanded=False):
+            with st.expander("Abrir Controle das Diagonais Decrescentes", expanded=False):
                 limites_dd = []
                 for d in range(10):
                     escolha_dd = st.selectbox(
                         f"Diag Decrescente DD{d+1:02d}",
                         opcoes_nomes,
-                        index=6,  # "0 ou 1"
+                        index=6,
                         key=f"sel_dd_{d}"
                     )
                     limites_dd.append(OPCOES_QUANTIDADE[escolha_dd])
 
     # QUADRO 4: PRIMOS, PARES, MOLDURA E SOMA
     with st.container(border=True):
-        st.markdown("#### 5️⃣ Primos, Pares, Ímpares, Moldura e Faixa de Soma")
+        st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
         with c_p1:
             primos_sel = st.multiselect("Quantidade de Primos:", [0, 1, 2, 3, 4, 5, 6], default=[1, 2])
@@ -383,7 +394,7 @@ with tab_config:
     placeholder_metricas = st.empty()
     barra_progresso = st.progress(0, text="Aguardando comando de execução...")
 
-    if st.button("🚀 Iniciar Varredura com Parâmetros Granulares", use_container_width=True):
+    if st.button("🚀 Processar Varredura e Desdobrar em Jogos de 6 Dezenas", use_container_width=True):
         if not primos_sel:
             st.error("Selecione pelo menos uma quantidade aceita de Primos.")
         elif not par_sel:
@@ -391,9 +402,9 @@ with tab_config:
         elif not moldura_sel:
             st.error("Selecione pelo menos uma quantidade de Moldura.")
         else:
-            with st.status("🛠️ Processando Varredura Granular...", expanded=True) as status_box:
+            with st.status("🛠️ Processando Motor Estrutural...", expanded=True) as status_box:
                 t0 = time.time()
-                resultados = motor_varredura_individual(
+                resultados = motor_executar_servico(
                     config_total, 
                     barra_progresso, 
                     status_box, 
@@ -406,35 +417,34 @@ with tab_config:
                 
                 if total_gerado > 0:
                     status_box.update(
-                        label=f"✅ Serviço Finalizado! {total_gerado:,} jogos encontrados em {t_fim:.2f}s.",
+                        label=f"✅ Serviço Finalizado! {total_gerado:,} apostas oficiais de 6 dezenas geradas em {t_fim:.2f}s.",
                         state="complete",
                         expanded=False
                     )
                 else:
                     status_box.update(
-                        label=f"⚠️ Finalizado em {t_fim:.2f}s, mas nenhuma aposta atende todos os critérios configurados.",
+                        label=f"⚠️ Finalizado em {t_fim:.2f}s, mas nenhuma aposta atendeu a todos os critérios simultaneamente.",
                         state="error",
                         expanded=True
                     )
 
-    # Exportação e Visualização
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas prontas para download!")
+        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais de 6 dezenas prontas!")
         
         txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
         
         c_btn, c_qtd = st.columns([3, 1])
         with c_btn:
             st.download_button(
-                "📥 Baixar Arquivo de Jogos (.TXT)",
+                "📥 Baixar Arquivo com Jogos de 6 Dezenas (.TXT)",
                 data=txt_saida,
-                file_name=f"mega60_apostas_granulares_{qtd_aprov}.txt",
+                file_name=f"mega60_jogos_6dezenas_{qtd_aprov}.txt",
                 mime="text/plain",
                 use_container_width=True
             )
         with c_qtd:
-            st.metric("Total em Memória", f"{qtd_aprov:,}")
+            st.metric("Apostas de 6 Números", f"{qtd_aprov:,}")
 
         amostra = min(qtd_aprov, 50)
         with st.expander(f"Visualizar Conferência Inicial ({amostra} de {qtd_aprov:,})", expanded=True):
@@ -448,15 +458,13 @@ with tab_config:
                 )
 
 # ==============================================================================
-# ABA 2: VOLANTE VISUAL & RAIO-X DO JOGO SELECIONADO
+# ABA 2: VOLANTE VISUAL & RAIO-X
 # ==============================================================================
 with tab_volante:
-    st.subheader("Dissecação da Cartela Oficial")
+    st.subheader("Dissecação da Cartela Oficial (Jogos de 6 Dezenas)")
     if st.session_state.jogos_aprovados:
         total_jogos = len(st.session_state.jogos_aprovados)
         
-        # CORREÇÃO DO ERRO StreamlitInvalidMinMaxError:
-        # Se houver apenas 1 jogo aprovado, fixa sel_idx = 1 sem criar slider inválido
         if total_jogos > 1:
             sel_idx = st.slider("Escolha a aposta para inspecionar:", 1, total_jogos, 1)
         else:
@@ -483,22 +491,22 @@ with tab_volante:
             <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
             .box{{background:#fff;border:2px solid #16a34a;border-radius:12px;padding:12px;box-shadow:0 4px 12px rgba(22,163,74,0.12);width:fit-content;}}
             .grid{{display:grid;grid-template-columns:repeat(10,36px);gap:5px;}}</style></head><body>
-            <div class="box"><div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#15803d;text-align:center;">Jogo #{sel_idx:04d}: {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
+            <div class="box"><div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#15803d;text-align:center;">Jogo #{sel_idx:04d} (6 dezenas): {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
             <div class="grid">{celulas}</div></div></body></html>
             """
             components.html(html_cartela, height=330, scrolling=False)
 
         with c_v2:
             with st.container(border=True):
-                st.markdown("#### 🔬 Raio-X Detalhado do Jogo")
+                st.markdown("#### 🔬 Raio-X Detalhado do Jogo de 6 Dezenas")
                 
                 cnt_linhas = Counter(PROPS[n]["r"] + 1 for n in jogo_ativo)
                 cnt_colunas = Counter(PROPS[n]["c"] + 1 for n in jogo_ativo)
                 cnt_dc = Counter(PROPS[n]["dc"] + 1 for n in jogo_ativo)
                 cnt_dd = Counter(PROPS[n]["dd"] + 1 for n in jogo_ativo)
 
-                st.markdown("**Linhas:** " + " • ".join([f"L{k}: `{v}x`" for k, v in sorted(cnt_linhas.items())]))
-                st.markdown("**Colunas:** " + " • ".join([f"C{k:02d}: `{v}x`" for k, v in sorted(cnt_colunas.items())]))
+                st.markdown("**Linhas Presentes:** " + " • ".join([f"L{k}: `{v}x`" for k, v in sorted(cnt_linhas.items())]))
+                st.markdown("**Colunas Presentes:** " + " • ".join([f"C{k:02d}: `{v}x`" for k, v in sorted(cnt_colunas.items())]))
                 st.markdown("**Diagonais Cresc. (D01-D10):** " + " • ".join([f"DC{k:02d}: `{v}x`" for k, v in sorted(cnt_dc.items())]))
                 st.markdown("**Diagonais Decresc. (D01-D10):** " + " • ".join([f"DD{k:02d}: `{v}x`" for k, v in sorted(cnt_dd.items())]))
                 
@@ -512,7 +520,7 @@ with tab_volante:
         st.info("Execute a varredura na primeira aba para inspecionar no volante.")
 
 # ==============================================================================
-# ABA 3: HISTÓRICO E CONEXÃO CAIXA
+# ABA 3: HISTÓRICO
 # ==============================================================================
 with tab_historico:
     st.subheader("Base de Sorteios Oficiais")
