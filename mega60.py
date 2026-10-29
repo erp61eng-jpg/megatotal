@@ -1,21 +1,20 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
-import numpy as np
 from itertools import combinations
 from collections import Counter
 import math
 import time
-import json
 import re
 
 st.set_page_config(
-    page_title="MEGA60 - Sistema de Elliott & Filtros Combinatórios",
-    page_icon="🌊",
+    page_title="MEGA60 - Cartela de Calor Elliott & Filtros",
+    page_icon="🔥",
     layout="wide"
 )
 
 # ==============================================================================
-# CONSTANTES & ESTRUTURA DA MATRIZ 6x10
+# PROPRIEDADES MATRICIAIS E FIBONACCI
 # ==============================================================================
 FIBONACCI_MEGASENA = {1, 2, 3, 5, 8, 13, 21, 34, 55}
 PRIMOS_MEGASENA = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59}
@@ -52,7 +51,6 @@ OPCOES_QTD = {
     "1 a 3": (1, 3)
 }
 
-# Histórico base para cálculo de ondas e atrasos
 HISTORICO_BASE = [
     [4, 12, 18, 30, 35, 54], [1, 9, 15, 23, 44, 52], [7, 14, 27, 39, 48, 59],
     [10, 11, 25, 33, 42, 58], [3, 16, 28, 37, 45, 60], [5, 20, 22, 34, 49, 56],
@@ -64,64 +62,47 @@ HISTORICO_BASE = [
 ]
 
 # ==============================================================================
-# MOTOR DE ONDAS DE ELLIOTT (CICLOS, RETRAÇÕES & MOMENTUM)
+# MOTOR TÉRMICO DE ELLIOTT (IMPULSO, RETRAÇÃO & MOMENTUM)
 # ==============================================================================
-def calcular_ranking_elliott(historico):
-    """
-    Avalia os 60 números segundo a dinâmica de ondas:
-    1. Atraso (Delay): proximidade com níveis de retração de Fibonacci (2, 3, 5, 8, 13 concursos).
-    2. Onda de Impulso: aceleração nos últimos 5 e 15 sorteios (curto prazo).
-    3. Ressonância Fractal: status nativo na sequência de Fibonacci.
-    """
-    total_concursos = len(historico)
-    atrasos = {n: total_concursos for n in range(1, 61)}
+def processar_metricas_elliott(historico):
+    total = len(historico)
+    atrasos = {n: total for n in range(1, 61)}
     freq_5 = {n: 0 for n in range(1, 61)}
     freq_15 = {n: 0 for n in range(1, 61)}
 
-    # Varredura do histórico do mais recente ao mais antigo
     for idx_rev, sorteio in enumerate(reversed(historico)):
         for n in sorteio:
-            if atrasos[n] == total_concursos:
+            if atrasos[n] == total:
                 atrasos[n] = idx_rev
             if idx_rev < 5:
                 freq_5[n] += 1
             if idx_rev < 15:
                 freq_15[n] += 1
 
-    scores = {}
+    dados = {}
     for n in range(1, 61):
         atr = atrasos[n]
-        
-        # Pontuação de retração: bônus quando o atraso coincide com nós de onda (Fibonacci)
         dist_fib = min(abs(atr - f) for f in [1, 2, 3, 5, 8, 13, 21])
         score_retracao = max(0.0, 10.0 - (dist_fib * 2.2))
-        
-        # Pontuação de impulso: momentum recente (Onda 3 em andamento)
-        score_impulso = (freq_5[n] * 6.0) + (freq_15[n] * 2.5)
-        
-        # Bônus harmônico de Fibonacci
-        score_fractal = 3.5 if PROPS[n]["is_fib"] else 0.0
+        score_impulso = (freq_5[n] * 6.5) + (freq_15[n] * 2.5)
+        score_fib = 3.5 if PROPS[n]["is_fib"] else 0.0
+        penalidade = -4.0 if atr > 21 else 0.0
 
-        # Penalidade por exaustão (> 22 concursos em repouso)
-        penalidade_sono = -4.0 if atr > 21 else 0.0
-
-        score_total = score_retracao + score_impulso + score_fractal + penalidade_sono
-        
-        scores[n] = {
+        score_total = max(0.0, score_retracao + score_impulso + score_fib + penalidade)
+        dados[n] = {
             "numero": n,
-            "score": round(score_total, 2),
+            "score": round(score_total, 1),
             "atraso": atr,
-            "fase": "Impulso (Onda 3)" if freq_5[n] >= 2 else ("Retração Ótima" if dist_fib <= 1 else "Acumulação"),
-            "fibonacci": "Sim" if PROPS[n]["is_fib"] else "Não"
+            "impulso": freq_5[n],
+            "is_fib": PROPS[n]["is_fib"]
         }
 
-    df_elliott = pd.DataFrame(scores.values()).sort_values(by="score", ascending=False).reset_index(drop=True)
-    return df_elliott
+    return dados
 
 # ==============================================================================
-# MOTOR COMBINATÓRIO E FILTROS MATRICIAIS
+# MOTOR DE FILTRAGEM MATRICIAL
 # ==============================================================================
-def validar_combinacao(jogo, cfg):
+def validar_aposta(jogo, cfg):
     soma_j = sum(jogo)
     if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
         return False
@@ -171,134 +152,204 @@ def validar_combinacao(jogo, cfg):
     return True
 
 # ==============================================================================
-# INTERFACE E ESTADO
+# ESTADO DE SESSÃO & CÁLCULOS INICIAIS
 # ==============================================================================
 if "historico_elliott" not in st.session_state:
     st.session_state.historico_elliott = HISTORICO_BASE
 
-df_elliott = calcular_ranking_elliott(st.session_state.historico_elliott)
-top_40_iniciais = sorted(df_elliott.head(40)["numero"].tolist())
+dados_calor = processar_metricas_elliott(st.session_state.historico_elliott)
+
+# Ordena pelo score para definir o ranking top 40 padrão
+ranking_ordenado = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
+top_40_padrao = {item["numero"] for item in ranking_ordenado[:40]}
 
 if "pool_trabalho" not in st.session_state:
-    st.session_state.pool_trabalho = top_40_iniciais
+    st.session_state.pool_trabalho = top_40_padrao.copy()
 
-st.title("🌊 MEGA60: Rotina de Elliott & Gestão do Pool de Dezenas")
-st.caption("Classificação Fractal • Ajuste Dinâmico do Pool • Validação por Filtros Matriciais")
+def toggle_dezena(n):
+    if n in st.session_state.pool_trabalho:
+        st.session_state.pool_trabalho.remove(n)
+    else:
+        st.session_state.pool_trabalho.add(n)
+
+# Cálculo de limites térmicos para normalização
+max_score = max(d["score"] for d in dados_calor.values())
+min_score = min(d["score"] for d in dados_calor.values())
+delta_score = max(0.1, max_score - min_score)
+
+def obter_estilo_calor(score):
+    norm = (score - min_score) / delta_score
+    if norm >= 0.70:
+        return {"cor_bg": "#fee2e2", "cor_texto": "#991b1b", "borda": "#ef4444", "icone": "🔥", "nivel": "Ultra Quente"}
+    elif norm >= 0.45:
+        return {"cor_bg": "#ffedd5", "cor_texto": "#9a3412", "borda": "#f97316", "icone": "☀️", "nivel": "Quente"}
+    elif norm >= 0.25:
+        return {"cor_bg": "#fef9c3", "cor_texto": "#854d0e", "borda": "#eab308", "icone": "🌤️", "nivel": "Morno"}
+    else:
+        return {"cor_bg": "#f1f5f9", "cor_texto": "#475569", "borda": "#94a3b8", "icone": "❄️", "nivel": "Frio"}
 
 # ==============================================================================
-# SEÇÃO 1: PAINEL DE ONDAS E GERENCIADOR DO POOL
+# INTERFACE VISUAL
 # ==============================================================================
+st.title("🔥 MEGA60: Cartela Térmica de Elliott & Filtros")
+st.caption("Matriz 6x10 com Calor Fractal • Introdução/Retirada Clicável • Varredura de Apostas")
+
+# ------------------------------------------------------------------------------
+# CARTELA INTERATIVA 6x10 COM CONTROLE DE POOL
+# ------------------------------------------------------------------------------
 with st.container(border=True):
-    st.markdown("### 📊 1. Ranking dos 40 Melhores Números (Sistema de Elliott)")
+    st.markdown("### 🎛️ Cartela Interativa de Elliott (Clique para Ativar / Remover)")
     
-    col_tabela, col_controles = st.columns([3, 2])
-    
-    with col_tabela:
-        st.dataframe(
-            df_elliott.head(40),
-            column_config={
-                "numero": st.column_config.NumberColumn("Dezena", format="%02d"),
-                "score": st.column_config.ProgressColumn("Score Elliott", format="%.2f", min_value=0, max_value=30),
-                "atraso": st.column_config.NumberColumn("Atraso Atual"),
-                "fase": st.column_config.TextColumn("Fase de Ciclo"),
-                "fibonacci": st.column_config.TextColumn("Fibonacci?")
-            },
-            height=320,
-            use_container_width=True
-        )
-
-    with col_controles:
-        st.markdown("**🔧 Modificar / Acrescentar Números:**")
-        
-        # Ações rápidas
-        c_act1, c_act2, c_act3 = st.columns(3)
-        with c_act1:
-            if st.button("Restaurar Top 40", use_container_width=True):
-                st.session_state.pool_trabalho = top_40_iniciais
-                st.rerun()
-        with c_act2:
-            if st.button("+5 Próximos", use_container_width=True):
-                extras = df_elliott.iloc[40:45]["numero"].tolist()
-                st.session_state.pool_trabalho = sorted(list(set(st.session_state.pool_trabalho + extras)))
-                st.rerun()
-        with c_act3:
-            if st.button("Limpar Pool", use_container_width=True):
-                st.session_state.pool_trabalho = []
-                st.rerun()
-
-        # Seleção granular
-        pool_selecionado = st.multiselect(
-            "Dezenas Ativas no Pool de Filtros:",
-            options=list(range(1, 61)),
-            default=st.session_state.pool_trabalho,
-            format_func=lambda x: f"{x:02d}"
-        )
-        st.session_state.pool_trabalho = sorted(pool_selecionado)
-
-        # Entrada textual livre para colar números
-        entrada_livre = st.text_input("Inserir Dezenas Manualmente (ex: 04, 18, 33):", "")
-        if st.button("Adicionar Dezenas Informadas"):
-            nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_livre)]
-            validos = [n for n in nums_parse if 1 <= n <= 60]
-            st.session_state.pool_trabalho = sorted(list(set(st.session_state.pool_trabalho + validos)))
+    # Botões de controle rápido
+    b1, b2, b3, b4, b5 = st.columns(5)
+    with b1:
+        if st.button("🌊 Restaurar Top 40 Elliott", use_container_width=True):
+            st.session_state.pool_trabalho = top_40_padrao.copy()
+            st.rerun()
+    with b2:
+        if st.button("🔥 Apenas Quentes (Top 20)", use_container_width=True):
+            st.session_state.pool_trabalho = {item["numero"] for item in ranking_ordenado[:20]}
+            st.rerun()
+    with b3:
+        if st.button("⚡ +9 Dezenas Fibonacci", use_container_width=True):
+            st.session_state.pool_trabalho.update(FIBONACCI_MEGASENA)
+            st.rerun()
+    with b4:
+        if st.button("✅ Marcar Todas (60)", use_container_width=True):
+            st.session_state.pool_trabalho = set(range(1, 61))
+            st.rerun()
+    with b5:
+        if st.button("🧹 Limpar Cartela", use_container_width=True):
+            st.session_state.pool_trabalho = set()
             st.rerun()
 
-    qtd_ativas = len(st.session_state.pool_trabalho)
-    total_combinacoes_brutas = math.comb(qtd_ativas, 6) if qtd_ativas >= 6 else 0
-    st.info(f"🎯 **Status Atual do Pool:** **{qtd_ativas} dezenas ativas** | Combinações possíveis de 6 números: **{total_combinacoes_brutas:,}**")
+    st.write("")
 
-# ==============================================================================
-# SEÇÃO 2: CONFIGURAÇÃO DOS FILTROS E GERAÇÃO
-# ==============================================================================
+    # Grid interativo 6x10
+    for r in range(6):
+        cols = st.columns(10)
+        for c in range(10):
+            n = r * 10 + c + 1
+            meta = dados_calor[n]
+            estilo = obter_estilo_calor(meta["score"])
+            ativa = n in st.session_state.pool_trabalho
+            
+            # Formatação do rótulo
+            check = "🟢" if ativa else "⚪"
+            rotulo = f"{check} {n:02d}\n{estilo['icone']}{meta['score']:.0f}p"
+            
+            tipo = "primary" if ativa else "secondary"
+            with cols[c]:
+                if st.button(rotulo, key=f"btn_calor_{n}", type=tipo, use_container_width=True):
+                    toggle_dezena(n)
+                    st.rerun()
+
+    # Legenda e status do pool
+    st.divider()
+    c_status1, c_status2 = st.columns([3, 1])
+    with c_status1:
+        st.markdown(
+            "**Legenda de Calor:** &nbsp; "
+            "<span style='color:#dc2626;font-weight:700;'>🔥 Ultra Quente (Onda 3 / Impulso)</span> &nbsp;|&nbsp; "
+            "<span style='color:#ea580c;font-weight:700;'>☀️ Quente (Retração Fib Ótima)</span> &nbsp;|&nbsp; "
+            "<span style='color:#ca8a04;font-weight:700;'>🌤️ Morno (Acumulação)</span> &nbsp;|&nbsp; "
+            "<span style='color:#64748b;font-weight:700;'>❄️ Frio (Repouso)</span>",
+            unsafe_allow_html=True
+        )
+        dezenas_formatadas = " - ".join([f"{n:02d}" for n in sorted(st.session_state.pool_trabalho)])
+        st.write(f"**Dezenas Selecionadas no Pool:** `{dezenas_formatadas if dezenas_formatadas else 'Nenhuma'}`")
+    
+    with c_status2:
+        qtd_sel = len(st.session_state.pool_trabalho)
+        comb_totais = math.comb(qtd_sel, 6) if qtd_sel >= 6 else 0
+        st.metric("Dezenas no Pool", f"{qtd_sel} / 60", delta=f"{qtd_sel - 40} vs Top 40")
+        st.caption(f"Espaço: **{comb_totais:,}** combinações")
+
+# ------------------------------------------------------------------------------
+# MAPA TÉRMICO VISUAL (RAIO-X CONTINUO)
+# ------------------------------------------------------------------------------
+with st.expander("🗺️ Ver Mapa Térmico Geral da Matriz 6x10 (Visualização Contínua)", expanded=False):
+    celulas_html = ""
+    for r in range(6):
+        for c in range(10):
+            n = r * 10 + c + 1
+            meta = dados_calor[n]
+            est = obter_estilo_calor(meta["score"])
+            ativa = n in st.session_state.pool_trabalho
+            
+            borda = "3px solid #16a34a" if ativa else f"1px solid {est['borda']}"
+            opacidade = "1.0" if ativa else "0.55"
+            
+            celulas_html += (
+                f'<div style="width:58px;height:48px;background:{est["cor_bg"]};color:{est["cor_texto"]};'
+                f'border:{borda};border-radius:8px;opacity:{opacidade};display:flex;flex-direction:column;'
+                f'align-items:center;justify-content:center;font-family:monospace;box-sizing:border-box;">'
+                f'<span style="font-size:13px;font-weight:900;">{n:02d}</span>'
+                f'<span style="font-size:10px;font-weight:700;">{est["icone"]} {meta["score"]}</span>'
+                f'</div>'
+            )
+
+    html_code = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;}}
+    .box{{background:#ffffff;border:2px solid #cbd5e1;border-radius:12px;padding:12px;width:fit-content;}}
+    .grid{{display:grid;grid-template-columns:repeat(10,58px);gap:6px;}}</style></head><body>
+    <div class="box"><div class="grid">{celulas_html}</div></div></body></html>
+    """
+    components.html(html_code, height=360, scrolling=False)
+
+# ------------------------------------------------------------------------------
+# FILTROS MATRICIAIS E GERAÇÃO DE APOSTAS
+# ------------------------------------------------------------------------------
 with st.container(border=True):
-    st.markdown("### 🎛️ 2. Filtros Matriciais para o Pool Ativo")
+    st.markdown("### 🎛️ Filtros para o Pool Selecionado")
     
-    tab_f1, tab_f2, tab_f3 = st.tabs(["Linhas & Colunas", "Diagonais", "Primos, Moldura & Soma"])
+    t_lin_col, t_diag, t_stats = st.tabs(["1️⃣ Linhas e Colunas", "2️⃣ Diagonais", "3️⃣ Primos, Paridade, Moldura e Soma"])
     
-    with tab_f1:
-        st.markdown("**Limites por Linha (L01 a L06):**")
-        cols_l = st.columns(6)
-        lim_linhas = []
+    with t_lin_col:
+        st.markdown("**Linhas (L01 a L06):**")
+        c_l = st.columns(6)
+        lim_l = []
         opcoes = list(OPCOES_QTD.keys())
         for r in range(6):
-            with cols_l[r]:
-                esc = st.selectbox(f"L{r+1:02d}", opcoes, index=0, key=f"el_l_{r}")
-                lim_linhas.append(OPCOES_QTD[esc])
+            with c_l[r]:
+                esc = st.selectbox(f"L{r+1:02d}", opcoes, index=0, key=f"flt_l_{r}")
+                lim_l.append(OPCOES_QTD[esc])
 
-        st.markdown("**Limites por Coluna (C01 a C10):**")
-        cols_c1, cols_c2 = st.columns(5), st.columns(5)
-        lim_colunas = []
+        st.markdown("**Colunas (C01 a C10):**")
+        c_c1, c_c2 = st.columns(5), st.columns(5)
+        lim_c = []
         for c in range(10):
-            alvo = cols_c1[c] if c < 5 else cols_c2[c - 5]
+            alvo = c_c1[c] if c < 5 else c_c2[c - 5]
             with alvo:
-                esc = st.selectbox(f"C{c+1:02d}", opcoes, index=4, key=f"el_c_{c}")
-                lim_colunas.append(OPCOES_QTD[esc])
+                esc = st.selectbox(f"C{c+1:02d}", opcoes, index=4, key=f"flt_c_{c}")
+                lim_c.append(OPCOES_QTD[esc])
 
-    with tab_f2:
-        c_dc, c_dd = st.columns(2)
-        with c_dc:
+    with t_diag:
+        cd1, cd2 = st.columns(2)
+        with cd1:
             st.markdown("**Diagonais Crescentes (DC01 a DC10 /):**")
-            lim_dc = [OPCOES_QTD[st.selectbox(f"DC{d+1:02d}", opcoes, index=4, key=f"el_dc_{d}")] for d in range(10)]
-        with c_dd:
+            lim_dc = [OPCOES_QTD[st.selectbox(f"DC{d+1:02d}", opcoes, index=4, key=f"flt_dc_{d}")] for d in range(10)]
+        with cd2:
             st.markdown("**Diagonais Decrescentes (DD01 a DD10 \\):**")
-            lim_dd = [OPCOES_QTD[st.selectbox(f"DD{d+1:02d}", opcoes, index=4, key=f"el_dd_{d}")] for d in range(10)]
+            lim_dd = [OPCOES_QTD[st.selectbox(f"DD{d+1:02d}", opcoes, index=4, key=f"flt_dd_{d}")] for d in range(10)]
 
-    with tab_f3:
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            sel_primos = st.multiselect("Primos:", list(range(7)), default=[1, 2, 3], key="el_primos")
-        with c2:
-            opcoes_par = {"3P / 3I": 3, "2P / 4I": 2, "4P / 2I": 4, "1P / 5I": 1, "5P / 1I": 5}
-            sel_pares_txt = st.multiselect("Paridade:", list(opcoes_par.keys()), default=["3P / 3I", "2P / 4I", "4P / 2I"], key="el_pares")
-            sel_pares = {opcoes_par[k] for k in sel_pares_txt}
-        with c3:
-            sel_moldura = st.multiselect("Moldura:", list(range(7)), default=[2, 3, 4], key="el_moldura")
-        with c4:
-            faixa_soma = st.slider("Faixa de Soma:", 60, 310, (120, 240), key="el_soma")
+    with t_stats:
+        p1, p2, p3, p4 = st.columns(4)
+        with p1:
+            sel_primos = st.multiselect("Primos:", list(range(7)), default=[1, 2, 3], key="flt_primos")
+        with p2:
+            par_map = {"3P / 3I": 3, "2P / 4I": 2, "4P / 2I": 4, "1P / 5I": 1, "5P / 1I": 5}
+            sel_pares_txt = st.multiselect("Paridade:", list(par_map.keys()), default=["3P / 3I", "2P / 4I", "4P / 2I"], key="flt_pares")
+            sel_pares = {par_map[k] for k in sel_pares_txt}
+        with p3:
+            sel_moldura = st.multiselect("Moldura:", list(range(7)), default=[2, 3, 4], key="flt_moldura")
+        with p4:
+            faixa_soma = st.slider("Faixa de Soma:", 60, 310, (110, 240), key="flt_soma")
 
-    cfg_ativa = {
-        "linhas": lim_linhas,
-        "colunas": lim_colunas,
+    cfg_varredura = {
+        "linhas": lim_l,
+        "colunas": lim_c,
         "diag_cresc": lim_dc,
         "diag_decresc": lim_dd,
         "primos_aceitos": set(sel_primos),
@@ -309,40 +360,41 @@ with st.container(border=True):
 
     st.divider()
     
-    # Execução do motor
-    col_exec, col_max = st.columns([3, 1])
-    with col_max:
-        max_apostas = st.number_input("Limite Máximo de Apostas:", min_value=10, max_value=50000, value=500, step=50)
+    col_run, col_lim = st.columns([3, 1])
+    with col_lim:
+        teto_apostas = st.number_input("Teto de Jogos Aprovados:", min_value=10, max_value=20000, value=250, step=50)
 
-    if st.button("🚀 Processar Apostas com Filtros", type="primary", use_container_width=True, disabled=qtd_ativas < 6):
-        with st.spinner("Executando motor de varredura..."):
-            t_inicio = time.time()
-            jogos_aprovados = []
-            testadas = 0
+    with col_run:
+        pode_gerar = len(st.session_state.pool_trabalho) >= 6
+        if st.button("🚀 Gerar e Filtrar Apostas do Pool Selecionado", type="primary", use_container_width=True, disabled=not pode_gerar):
+            with st.spinner("Processando combinações contra os filtros..."):
+                t0 = time.time()
+                jogos_validos = []
+                pool_lista = sorted(list(st.session_state.pool_trabalho))
+                testadas = 0
 
-            for comb in combinations(st.session_state.pool_trabalho, 6):
-                testadas += 1
-                if validar_combinacao(comb, cfg_ativa):
-                    jogos_aprovados.append(comb)
-                    if len(jogos_aprovados) >= max_apostas:
-                        break
+                for c in combinations(pool_lista, 6):
+                    testadas += 1
+                    if validar_aposta(c, cfg_varredura):
+                        jogos_validos.append(c)
+                        if len(jogos_validos) >= teto_apostas:
+                            break
 
-            delta = time.time() - t_inicio
-            st.success(f"Finalizado em {delta:.2f}s! Combinações testadas: {testadas:,} | **Jogos aprovados: {len(jogos_aprovados):,}**")
+                delta_t = time.time() - t0
+                st.success(f"Filtro concluído em {delta_t:.2f}s! Combinações testadas: {testadas:,} | **Jogos aprovados: {len(jogos_validos):,}**")
 
-            if jogos_aprovados:
-                txt_export = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in jogos_aprovados])
-                
-                c_down, c_prev = st.columns([1, 2])
-                with c_down:
+                if jogos_validos:
+                    txt_out = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in jogos_validos])
+                    
                     st.download_button(
-                        "📥 Baixar Apostas (.TXT)",
-                        data=txt_export,
-                        file_name=f"mega60_elliott_{len(jogos_aprovados)}.txt",
+                        "📥 Baixar Arquivo de Jogos (.TXT)",
+                        data=txt_out,
+                        file_name=f"apostas_mega60_calor_{len(jogos_validos)}.txt",
                         mime="text/plain",
                         use_container_width=True
                     )
-                with c_prev:
-                    with st.expander("Visualizar Primeiras Apostas Geradas"):
-                        for i, j in enumerate(jogos_aprovados[:10], start=1):
-                            st.write(f"**Aposta #{i:03d}:** `{' - '.join([f'{n:02d}' for n in j])}`")
+                    
+                    with st.expander("Visualizar Apostas Geradas", expanded=True):
+                        for idx, aposta in enumerate(jogos_validos[:15], start=1):
+                            scores_jogo = [f"{n:02d}" for n in aposta]
+                            st.write(f"**Jogo #{idx:03d}:** `{' - '.join(scores_jogo)}` | Soma: `{sum(aposta)}`")
