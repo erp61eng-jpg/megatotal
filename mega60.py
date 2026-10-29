@@ -10,7 +10,7 @@ import random
 import pandas as pd
 
 st.set_page_config(
-    page_title="MEGA60 - Cartela Virtual & Filtros Estruturais",
+    page_title="MEGA60 - Cartela Virtual, Filtros & Conferidor Oficial",
     page_icon="🍀",
     layout="wide"
 )
@@ -129,7 +129,6 @@ def validar_aposta_final_6(jogo, cfg):
     return True
 
 def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, ticker_metricas):
-    """Combina apenas as dezenas selecionadas na cartela e filtra com os 7 quadros."""
     t_inicio = time.time()
     dezenas_candidatas = sorted(list(pool_dezenas))
     k_escolhidas = len(dezenas_candidatas)
@@ -193,9 +192,11 @@ def processar_arquivo_upload(conteudo_bytes):
     return jogos, invalidos
 
 def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
+    """Compara toda a base de apostas contra o resultado sorteado."""
     sorteio_set = set(dezenas_sorteadas)
     placar = {6: [], 5: [], 4: [], 3: [], 2: [], 1: [], 0: []}
     relatorio = []
+    
     for idx, jogo in enumerate(lista_jogos):
         acertos = sorted(list(set(jogo) & sorteio_set))
         qtd = len(acertos)
@@ -207,6 +208,62 @@ def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
             "acertos": acertos
         })
     return relatorio, placar
+
+def render_cartao_sorteio_html(dezenas, titulo="CARTÃO OFICIAL DO SORTEIO"):
+    bolas_html = "".join([
+        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;"
+        f"background:linear-gradient(135deg,#eab308,#ca8a04);color:#ffffff;font-weight:900;font-size:17px;"
+        f"border-radius:50%;margin:0 5px;box-shadow:0 3px 8px rgba(202,138,4,0.4);border:2px solid #a16207;"
+        f"font-family:monospace;'>{n:02d}</span>"
+        for n in dezenas
+    ])
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(135deg,#fefce8,#fef08a);border:2px solid #eab308;border-radius:14px;padding:14px 18px;margin:10px 0 16px 0;box-shadow:0 4px 12px rgba(234,179,8,0.25);text-align:center;">
+            <div style="font-weight:900;color:#854d0e;font-size:13px;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;">🏆 {titulo}</div>
+            <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:4px;">{bolas_html}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
+    jogo_set = set(jogo)
+    sorteio_set = set(dezenas_sorteio)
+    celulas = ""
+    
+    for r in range(6):
+        for c in range(10):
+            n = r * 10 + c + 1
+            if n in jogo_set and n in sorteio_set:
+                # ACERTO PREMIADO (Verde Sólido com borda escura)
+                celulas += f'<div style="width:36px;height:36px;background:#16a34a;color:#ffffff;font-weight:900;border:2px solid #0f5132;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:12px;box-sizing:border-box;">{n:02d}<span style="font-size:9px;line-height:8px;">★</span></div>'
+            elif n in jogo_set:
+                # JOGADO MAS NÃO SORTEADO (Azul Suave)
+                celulas += f'<div style="width:36px;height:36px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;box-sizing:border-box;">{n:02d}</div>'
+            elif n in sorteio_set:
+                # SORTEADO MAS NÃO JOGADO (Dourado/Amarelo)
+                celulas += f'<div style="width:36px;height:36px;background:#fef08a;color:#854d0e;font-weight:800;border:2px dashed #ca8a04;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;box-sizing:border-box;">{n:02d}</div>'
+            else:
+                # VAZIO
+                bg = "#f1f5f9" if n in MOLDURA_SET else "#ffffff"
+                celulas += f'<div style="width:36px;height:36px;background:{bg};color:#94a3b8;border:1px solid #e2e8f0;font-weight:600;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;box-sizing:border-box;">{n:02d}</div>'
+
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
+    .box{{background:#fff;border:2px solid #cbd5e1;border-radius:12px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,0.06);width:fit-content;}}
+    .grid{{display:grid;grid-template-columns:repeat(10,36px);gap:5px;}}</style></head><body>
+    <div class="box"><div style="font-weight:800;font-size:13px;margin-bottom:8px;color:#0f172a;text-align:center;">{titulo}</div>
+    <div class="grid">{celulas}</div>
+    <div style="margin-top:10px;display:flex;justify-content:center;gap:12px;font-size:11px;font-weight:700;">
+        <span style="color:#16a34a;">★ Verde: Acerto</span>
+        <span style="color:#0284c7;">■ Azul: Jogado</span>
+        <span style="color:#ca8a04;">□ Amarelo: Sorteado</span>
+    </div>
+    </div></body></html>
+    """
+    components.html(html, height=360, scrolling=False)
 
 # ==============================================================================
 # INICIALIZAÇÃO DE ESTADO
@@ -222,7 +279,6 @@ if "jogos_upload" not in st.session_state:
     st.session_state.jogos_upload = []
 
 if "cartela_selecao" not in st.session_state:
-    # Inicia com as 60 selecionadas por padrão
     st.session_state.cartela_selecao = set(range(1, 61))
 
 def alternar_dezena(n):
@@ -232,10 +288,10 @@ def alternar_dezena(n):
         st.session_state.cartela_selecao.add(n)
 
 # ==============================================================================
-# INTERFACE PRINCIPAL
+# INTERFACE PRINCIPAL (5 ABAS)
 # ==============================================================================
-st.title("🍀 MEGA60: Cartela Virtual & Filtros Estruturais")
-st.caption("Marque as dezenas na Cartela Interativa • Filtre pelos 7 Quadros • Confira Resultados")
+st.title("🍀 MEGA60: Cartela Virtual & Conferidor Oficial de Apostas")
+st.caption("Matriz 6x10 • Varredura Granular dos 7 Quadros • Conferência Instantânea com Cartão Sorteado")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎟️ Cartela Virtual (Selecione os Números)",
@@ -246,13 +302,12 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 ])
 
 # ==============================================================================
-# ABA 1: CARTELA VIRTUAL INTERATIVA
+# ABA 1: CARTELA VIRTUAL
 # ==============================================================================
 with tab_cartela:
     st.subheader("🎟️ Cartela Virtual Interativa (Matriz 6x10)")
-    st.markdown("Clique nos números que deseja jogar. O sistema gerará as combinações **apenas a partir das dezenas ativas**.")
+    st.markdown("Marque as dezenas que deseja jogar clicando nos botões abaixo:")
 
-    # BOTÕES DE AÇÃO RÁPIDA
     c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns(5)
     with c_btn1:
         if st.button("🧹 Limpar Cartela", use_container_width=True):
@@ -277,7 +332,6 @@ with tab_cartela:
 
     st.divider()
 
-    # RENDERIZAÇÃO DA CARTELA VIRTUAL (10 COLUNAS X 6 LINHAS)
     for r in range(6):
         cols = st.columns(10)
         for c in range(10):
@@ -285,7 +339,6 @@ with tab_cartela:
             esta_marcada = n in st.session_state.cartela_selecao
             tipo_btn = "primary" if esta_marcada else "secondary"
             rotulo = f"🟢 {n:02d}" if esta_marcada else f"{n:02d}"
-            
             with cols[c]:
                 if st.button(rotulo, key=f"btn_num_{n}", type=tipo_btn, use_container_width=True):
                     alternar_dezena(n)
@@ -294,27 +347,24 @@ with tab_cartela:
     qtd_sel = len(st.session_state.cartela_selecao)
     st.divider()
 
-    # PAINEL DE STATUS DA SELEÇÃO
     col_inf1, col_inf2 = st.columns([2, 1])
     with col_inf1:
         if qtd_sel < 6:
-            st.warning(f"⚠️ Você selecionou **{qtd_sel} dezenas**. Selecione pelo menos 6 números para poder combinar.")
+            st.warning(f"⚠️ Você selecionou **{qtd_sel} dezenas**. Selecione pelo menos 6 números.")
         else:
             total_comb = math.comb(qtd_sel, 6)
             dezenas_txt = " - ".join([f"{n:02d}" for n in sorted(list(st.session_state.cartela_selecao))])
             st.success(f"✅ **{qtd_sel} Dezenas Ativas:** `{dezenas_txt}`")
-            st.info(f"📊 Espaço Amostral: Esta seleção produz **{total_comb:,} combinações brutas de 6 números** antes dos filtros.")
-
+            st.info(f"📊 Espaço Amostral: **{total_comb:,} combinações brutas de 6 números** antes dos filtros.")
     with col_inf2:
         st.metric("Dezenas Selecionadas", f"{qtd_sel} / 60")
 
 # ==============================================================================
-# ABA 2: CONFIGURAÇÃO DOS 7 QUADROS & EXECUÇÃO DO FILTRO
+# ABA 2: CONFIGURAÇÃO DOS 7 QUADROS
 # ==============================================================================
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais para Aplicar Sobre as Dezenas Selecionadas")
 
-    # QUADRO 1: LINHAS
     with st.container(border=True):
         st.markdown("#### 1️⃣ Linhas Individuais (01 a 06)")
         cols_l = st.columns(6)
@@ -325,7 +375,6 @@ with tab_config:
                 esc = st.selectbox(f"Linha {r+1:02d}", opcoes_nomes, index=0, key=f"sel_l_{r}")
                 limites_linhas.append(OPCOES_QUANTIDADE[esc])
 
-    # QUADRO 2: COLUNAS
     with st.container(border=True):
         st.markdown("#### 2️⃣ Colunas Individuais (01 a 10)")
         cols_c_up, cols_c_dw = st.columns(5), st.columns(5)
@@ -336,7 +385,6 @@ with tab_config:
                 esc = st.selectbox(f"Coluna {c+1:02d}", opcoes_nomes, index=6, key=f"sel_c_{c}")
                 limites_colunas.append(OPCOES_QUANTIDADE[esc])
 
-    # QUADRO 3: DIAGONAIS
     c_diag1, c_diag2 = st.columns(2)
     with c_diag1:
         with st.container(border=True):
@@ -355,7 +403,6 @@ with tab_config:
                     esc = st.selectbox(f"DD{d+1:02d}", opcoes_nomes, index=6, key=f"sel_dd_{d}")
                     limites_dd.append(OPCOES_QUANTIDADE[esc])
 
-    # QUADRO 4: PRIMOS, PARES, MOLDURA E SOMA
     with st.container(border=True):
         st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
@@ -383,7 +430,6 @@ with tab_config:
 
     st.divider()
 
-    # LINHA DE ACOMPANHAMENTO DE SERVIÇO
     st.markdown("### 📡 Linha de Acompanhamento de Serviço")
     placeholder_metricas = st.empty()
     barra_progresso = st.progress(0, text="Aguardando comando de execução...")
@@ -391,12 +437,8 @@ with tab_config:
     pode_processar = len(st.session_state.cartela_selecao) >= 6
 
     if st.button("🚀 Gerar e Filtrar Apostas das Dezenas da Cartela", use_container_width=True, disabled=not pode_processar):
-        if not primos_sel:
-            st.error("Selecione pelo menos uma quantidade aceita de Primos.")
-        elif not par_sel:
-            st.error("Selecione pelo menos uma proporção de Pares/Ímpares.")
-        elif not moldura_sel:
-            st.error("Selecione pelo menos uma quantidade de Moldura.")
+        if not primos_sel or not par_sel or not moldura_sel:
+            st.error("Configure todos os critérios básicos (Primos, Pares e Moldura).")
         else:
             with st.status("🛠️ Processando Motor Combinatório...", expanded=True) as status_box:
                 t0 = time.time()
@@ -419,14 +461,14 @@ with tab_config:
                     )
                 else:
                     status_box.update(
-                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação das dezenas selecionadas atendeu todos os filtros simultaneamente.",
+                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu a todos os filtros.",
                         state="error",
                         expanded=True
                     )
 
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais de 6 dezenas prontas!")
+        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas de 6 dezenas prontas!")
         txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
         
         c_d1, c_d2 = st.columns([3, 1])
@@ -440,14 +482,6 @@ with tab_config:
             )
         with c_d2:
             st.metric("Apostas Geradas", f"{qtd_aprov:,}")
-
-        amostra = min(qtd_aprov, 50)
-        with st.expander(f"Visualizar Conferência Inicial ({amostra} de {qtd_aprov:,})", expanded=True):
-            for i, j in enumerate(st.session_state.jogos_aprovados[:amostra]):
-                p = sum(1 for n in j if PROPS[n]["is_primo"])
-                par = sum(1 for n in j if PROPS[n]["is_par"])
-                mold = sum(1 for n in j if PROPS[n]["is_moldura"])
-                st.markdown(f"**Jogo #{i+1:04d}:** `{' - '.join([f'{n:02d}' for n in j])}` | {par}P/{6-par}I | {p} Primos | {mold} Moldura | Soma: {sum(j)}")
 
 # ==============================================================================
 # ABA 3: VOLANTE VISUAL & RAIO-X
@@ -501,14 +535,16 @@ with tab_volante:
                 st.divider()
                 st.markdown(f"**Pares/Ímpares:** `{pa}P / {6-pa}I` | **Primos:** `{pr}` | **Moldura:** `{mo}` | **Soma:** `{sum(jogo_ativo)}`")
     else:
-        st.info("Gere jogos na aba anterior para inspecionar no volante interativo.")
+        st.info("Gere jogos na aba anterior para inspecionar no volante.")
 
 # ==============================================================================
-# ABA 4: UPLOAD & CONFERÊNCIA
+# ABA 4: UPLOAD & CONFERÊNCIA COM CARTÃO DO SORTEIO E FILTRO CORRIGIDO
 # ==============================================================================
 with tab_upload:
-    st.subheader("📥 Upload, Estatísticas & Conferência de Resultados")
-    arquivo_enviado = st.file_uploader("Carregue seu arquivo de apostas (.txt ou .csv):", type=["txt", "csv"])
+    st.subheader("📥 Upload, Auditoria Estatística & Conferência de Resultados")
+    st.caption("Envie seu arquivo de apostas (.txt ou .csv). À esquerda veja o diagnóstico e à direita confira contra o Cartão Oficial Sorteado.")
+
+    arquivo_enviado = st.file_uploader("Carregue seu arquivo de apostas:", type=["txt", "csv"])
 
     if arquivo_enviado is not None:
         conteudo = arquivo_enviado.read()
@@ -520,13 +556,15 @@ with tab_upload:
     if st.session_state.jogos_upload:
         jogos_up = st.session_state.jogos_upload
         total_up = len(jogos_up)
-        st.success(f"✅ **Arquivo Ativo:** **{total_up:,} apostas** carregadas.")
+        st.success(f"✅ **Arquivo Ativo:** **{total_up:,} apostas oficiais** carregadas em memória.")
 
         col_diag_left, col_conf_right = st.columns([1, 1], gap="large")
 
-        # COLUNA 1: DIAGNÓSTICO
+        # ----------------------------------------------------------------------
+        # COLUNA 1: DIAGNÓSTICO ESTATÍSTICO
+        # ----------------------------------------------------------------------
         with col_diag_left:
-            st.markdown("### 📊 Diagnóstico das Apostas")
+            st.markdown("### 📊 Coluna 1: Diagnóstico das Apostas")
             cnt_nums = Counter()
             somas = []
             for j in jogos_up:
@@ -534,10 +572,11 @@ with tab_upload:
                 somas.append(sum(j))
 
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total", f"{total_up:,}")
+            m1.metric("Total de Jogos", f"{total_up:,}")
             m2.metric("Soma Média", f"{sum(somas)/len(somas):.1f}")
             m3.metric("Mais Frequente", f"{cnt_nums.most_common(1)[0][0]:02d}")
 
+            st.markdown("#### 🔥 Frequência na Matriz 6x10")
             v_min, v_max = min(cnt_nums.values()), max(cnt_nums.values())
             delta_v = max(1, v_max - v_min)
             celulas_up_heat = ""
@@ -553,23 +592,34 @@ with tab_upload:
             html_up = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}.box{{background:#fff;border:2px solid #cbd5e1;border-radius:12px;padding:10px;width:fit-content;}}.grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body><div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>'
             components.html(html_up, height=290, scrolling=False)
 
-        # COLUNA 2: CONFERIDOR
+        # ----------------------------------------------------------------------
+        # COLUNA 2: CONFERIDOR COM CARTÃO OFICIAL DO SORTEIO E FILTRO 100% CORRIGIDO
+        # ----------------------------------------------------------------------
         with col_conf_right:
-            st.markdown("### 🎯 Conferência de Resultados")
+            st.markdown("### 🎯 Coluna 2: Conferência de Resultados")
+            
             ult_sorteio = st.session_state.historico[-1] if st.session_state.historico else [4, 12, 18, 30, 35, 54]
             txt_padrao = " ".join([f"{n:02d}" for n in ult_sorteio])
 
             modo_origem = st.radio("Origem do Sorteio:", ["Último Sorteio Oficial", "Digitar Manualmente"], horizontal=True)
             if modo_origem == "Último Sorteio Oficial":
-                dezenas_conf = ult_sorteio
-                st.info(f"🏆 Concurso Oficial: **{' - '.join([f'{n:02d}' for n in dezenas_conf])}**")
+                dezenas_conf = sorted(ult_sorteio)
             else:
                 entrada_manual = st.text_input("6 Dezenas Sorteadas (separadas por espaço):", value=txt_padrao)
                 nums_man = [int(x) for x in re.findall(r"\b\d+\b", entrada_manual)]
                 dezenas_conf = sorted(list(set([n for n in nums_man if 1 <= n <= 60])))
 
-            if len(dezenas_conf) == 6:
+            if len(dezenas_conf) != 6:
+                st.error("Informe exatamente 6 dezenas distintas entre 01 e 60 para conferir.")
+            else:
+                # 1. EXIBIÇÃO VISUAL DO CARTÃO DO SORTEIO
+                render_cartao_sorteio_html(dezenas_conf, titulo="CARTÃO DO SORTEIO OFICIAL CONFERIDO")
+
+                # 2. CONFERÊNCIA EM 100% DAS APOSTAS
                 relatorio_conf, placar_conf = conferir_apostas_contra_sorteio(jogos_up, dezenas_conf)
+                
+                # 3. PLACAR DE PREMIAÇÃO
+                st.markdown("#### 🏆 Placar de Premiação do Arquivo")
                 c_s, c_q, c_qd, c_t = st.columns(4)
                 c_s.metric("Sena (6)", f"{len(placar_conf[6])}")
                 c_q.metric("Quina (5)", f"{len(placar_conf[5])}")
@@ -579,16 +629,107 @@ with tab_upload:
                 tot_prem = len(placar_conf[6]) + len(placar_conf[5]) + len(placar_conf[4])
                 if tot_prem > 0:
                     st.balloons()
-                    st.success(f"🎉 **{tot_prem} aposta(s) premiada(s)** (Quadra, Quina ou Sena)!")
+                    st.success(f"🎉 **{tot_prem} aposta(s) premiada(s)** encontradas no seu arquivo!")
+                else:
+                    st.warning("Nenhuma aposta alcançou 4, 5 ou 6 acertos neste sorteio.")
 
-                filtro_ex = st.selectbox("Filtrar:", ["Apenas Premiadas (4, 5, 6)", "Todas as Apostas"], index=0 if tot_prem > 0 else 1)
-                sorteio_set = set(dezenas_conf)
-                for item in relatorio_conf[:30]:
-                    qtd_a = item["qtd_acertos"]
-                    if filtro_ex == "Apenas Premiadas (4, 5, 6)" and qtd_a < 4: continue
-                    badge = "🏆 SENA!" if qtd_a == 6 else ("🥈 QUINA!" if qtd_a == 5 else ("🥉 QUADRA!" if qtd_a == 4 else ""))
-                    bolinhas = "".join([f"<span style='display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:{'#16a34a' if n in sorteio_set else '#f1f5f9'};color:{'#ffffff' if n in sorteio_set else '#475569'};font-weight:800;font-size:12px;border-radius:50%;margin:0 2px;font-family:monospace;'>{n:02d}</span>" for n in item["jogo"]])
-                    st.markdown(f"<div style='background:#fff;border-left:4px solid {'#16a34a' if qtd_a >= 4 else '#cbd5e1'};padding:6px 12px;margin:4px 0;display:flex;justify-content:space-between;align-items:center;'><div><span style='font-weight:700;'>#{item['num_aposta']:03d}</span> {bolinhas}</div><div><span style='font-weight:700;color:#16a34a;'>{qtd_a} acertos {badge}</span></div></div>", unsafe_allow_html=True)
+                # 4. FILTRAGEM CORRIGIDA: FILTRA A LISTA COMPLETA ANTES DE EXIBIR
+                filtro_ex = st.selectbox(
+                    "Filtrar lista de apostas:",
+                    [
+                        "Apenas Premiadas (Sena, Quina e Quadra)",
+                        "Apenas Senas (6 acertos)",
+                        "Apenas Quinas (5 acertos)",
+                        "Apenas Quadras (4 acertos)",
+                        "Apenas com Acertos (1 a 6)",
+                        "Todas as Apostas"
+                    ],
+                    index=0 if tot_prem > 0 else 5
+                )
+
+                if filtro_ex == "Apenas Premiadas (Sena, Quina e Quadra)":
+                    jogos_filtrados = [it for it in relatorio_conf if it["qtd_acertos"] >= 4]
+                elif filtro_ex == "Apenas Senas (6 acertos)":
+                    jogos_filtrados = [it for it in relatorio_conf if it["qtd_acertos"] == 6]
+                elif filtro_ex == "Apenas Quinas (5 acertos)":
+                    jogos_filtrados = [it for it in relatorio_conf if it["qtd_acertos"] == 5]
+                elif filtro_ex == "Apenas Quadras (4 acertos)":
+                    jogos_filtrados = [it for it in relatorio_conf if it["qtd_acertos"] == 4]
+                elif filtro_ex == "Apenas com Acertos (1 a 6)":
+                    jogos_filtrados = [it for it in relatorio_conf if it["qtd_acertos"] >= 1]
+                else:
+                    jogos_filtrados = relatorio_conf
+
+                st.caption(f"Exibindo **{len(jogos_filtrados):,}** aposta(s) de acordo com o filtro:")
+
+                if not jogos_filtrados:
+                    st.info("Nenhuma aposta encontrada para a categoria selecionada.")
+                else:
+                    sorteio_set = set(dezenas_conf)
+                    
+                    # 5. LISTA DAS APOSTAS PREMIADAS COM DESTAQUE
+                    for item in jogos_filtrados[:40]:
+                        qtd_a = item["qtd_acertos"]
+                        badge = ""
+                        if qtd_a == 6: badge = "🏆 SENA!"
+                        elif qtd_a == 5: badge = "🥈 QUINA!"
+                        elif qtd_a == 4: badge = "🥉 QUADRA!"
+                        
+                        bolinhas = "".join([
+                            f"<span style='display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;"
+                            f"background:{'#16a34a' if n in sorteio_set else '#f1f5f9'};"
+                            f"color:{'#ffffff' if n in sorteio_set else '#475569'};"
+                            f"font-weight:800;font-size:12px;border-radius:50%;margin:0 2px;"
+                            f"border:1px solid {'#15803d' if n in sorteio_set else '#cbd5e1'};font-family:monospace;'>{n:02d}</span>"
+                            for n in item["jogo"]
+                        ])
+                        
+                        st.markdown(
+                            f"""
+                            <div style="background:#ffffff;border:1px solid {'#22c55e' if qtd_a >= 4 else '#e2e8f0'};border-left:5px solid {'#16a34a' if qtd_a >= 4 else '#94a3b8'};border-radius:8px;padding:8px 12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="font-weight:800;font-size:13px;color:#0f172a;">#{item['num_aposta']:04d}</span>
+                                    <div>{bolinhas}</div>
+                                </div>
+                                <div>
+                                    <span style="background:{'#dcfce7' if qtd_a >= 4 else '#f1f5f9'};color:{'#15803d' if qtd_a >= 4 else '#64748b'};padding:3px 8px;border-radius:10px;font-size:12px;font-weight:800;">
+                                        {qtd_a} acertos {badge}
+                                    </span>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                    # 6. VOLANTE COMPARATIVO DA APOSTA PREMIADA SELECIONADA
+                    st.divider()
+                    st.markdown("#### 🔍 Comparar Aposta Premiada no Volante 6x10")
+                    opcoes_idx = [it["num_aposta"] for it in jogos_filtrados]
+                    idx_escolhido = st.selectbox("Escolha a aposta para ver no volante comparativo:", opcoes_idx, format_func=lambda x: f"Aposta #{x:04d}")
+                    
+                    item_selecionado = next(it for it in jogos_filtrados if it["num_aposta"] == idx_escolhido)
+                    render_volante_conferencia(
+                        item_selecionado["jogo"],
+                        dezenas_conf,
+                        titulo=f"Volante Comparativo: Aposta #{item_selecionado['num_aposta']:04d} ({item_selecionado['qtd_acertos']} Acertos)"
+                    )
+
+                # 7. DOWNLOAD DE APOSTAS PREMIADAS
+                if tot_prem > 0:
+                    st.divider()
+                    jogos_premiados_txt = "\n".join([
+                        f"{' '.join([f'{n:02d}' for n in it['jogo']])} | {it['qtd_acertos']} ACERTOS"
+                        for it in relatorio_conf if it["qtd_acertos"] >= 4
+                    ])
+                    st.download_button(
+                        "📥 Baixar Apenas Apostas Premiadas (4, 5 e 6 Acertos) [.TXT]",
+                        data=jogos_premiados_txt,
+                        file_name=f"mega60_apostas_premiadas_{tot_prem}.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+    else:
+        st.info("Envie um arquivo de apostas no topo da página para conferir seus acertos.")
 
 # ==============================================================================
 # ABA 5: HISTÓRICO
