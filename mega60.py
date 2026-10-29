@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import combinations, product
 from collections import Counter
 import math
@@ -9,7 +10,7 @@ import re
 import pandas as pd
 
 st.set_page_config(
-    page_title="MEGA60 - Laboratório Estrutural Granular",
+    page_title="MEGA60 - Laboratório Estrutural & Conferidor",
     page_icon="🍀",
     layout="wide"
 )
@@ -252,10 +253,9 @@ def motor_executar_servico(cfg, bar_progresso, container_status, ticker_metricas
     return [list(j) for j in sorted(list(jogos_finais_set))]
 
 # ==============================================================================
-# FUNÇÕES DE PROCESSAMENTO E PARSER DE UPLOAD
+# FUNÇÕES DE PROCESSAMENTO E CONFERÊNCIA DE RESULTADOS
 # ==============================================================================
 def processar_arquivo_upload(conteudo_bytes):
-    """Extrai jogos de 6 dezenas a partir de texto com qualquer separador."""
     texto = conteudo_bytes.decode("utf-8", errors="ignore")
     linhas = texto.strip().splitlines()
     jogos = []
@@ -265,7 +265,6 @@ def processar_arquivo_upload(conteudo_bytes):
         l = linha.strip()
         if not l:
             continue
-        # Encontra todos os números na linha
         nums = [int(x) for x in re.findall(r"\b\d+\b", l)]
         nums_validos = sorted(list(set([n for n in nums if 1 <= n <= 60])))
         if len(nums_validos) == 6:
@@ -276,7 +275,6 @@ def processar_arquivo_upload(conteudo_bytes):
     return jogos, invalidos
 
 def calcular_estatisticas_completas(lista_jogos):
-    """Gera diagnóstico estatístico detalhado sobre uma lista de jogos."""
     if not lista_jogos:
         return None
         
@@ -324,6 +322,25 @@ def calcular_estatisticas_completas(lista_jogos):
         "somas": somas
     }
 
+def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
+    """Compara cada aposta contra o sorteio e contabiliza os acertos."""
+    sorteio_set = set(dezenas_sorteadas)
+    placar = {6: [], 5: [], 4: [], 3: [], 2: [], 1: [], 0: []}
+    relatorio = []
+
+    for idx, jogo in enumerate(lista_jogos):
+        acertos = sorted(list(set(jogo) & sorteio_set))
+        qtd = len(acertos)
+        placar[qtd].append(idx + 1)
+        relatorio.append({
+            "num_aposta": idx + 1,
+            "jogo": jogo,
+            "qtd_acertos": qtd,
+            "acertos": acertos
+        })
+
+    return relatorio, placar
+
 # ==============================================================================
 # INICIALIZAÇÃO
 # ==============================================================================
@@ -338,15 +355,15 @@ if "jogos_upload" not in st.session_state:
     st.session_state.jogos_upload = []
 
 # ==============================================================================
-# INTERFACE PRINCIPAL (4 ABAS)
+# INTERFACE PRINCIPAL
 # ==============================================================================
-st.title("🍀 MEGA60: Painel de Filtros & Auditoria Estatística")
-st.caption("Configuração Granular • Desdobramento Automático • Auditoria Completa por Upload")
+st.title("🍀 MEGA60: Painel de Filtros & Auditoria com Conferência")
+st.caption("Configuração Granular • Desdobramento Automático • Auditoria e Conferência de Resultados")
 
 tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎛️ Configuração dos Quadros",
     "🗺️ Volante Visual & Raio-X",
-    "📥 Upload & Estatísticas de Apostas",
+    "📥 Upload, Estatísticas & Conferência",
     "📊 Histórico & Conexão Caixa"
 ])
 
@@ -599,190 +616,216 @@ with tab_volante:
         st.info("Execute a varredura na primeira aba para inspecionar no volante.")
 
 # ==============================================================================
-# ABA 3: NOVA SEÇÃO - UPLOAD & ESTATÍSTICAS COMPLETAS
+# ABA 3: UPLOAD, ESTATÍSTICAS E CONFERÊNCIA EM 2 COLUNAS
 # ==============================================================================
 with tab_upload:
-    st.subheader("📥 Upload & Diagnóstico Estatístico das Suas Apostas")
-    st.markdown("""
-    Envie um arquivo com suas apostas (`.txt` ou `.csv`). O sistema aceita qualquer separador 
-    (espaço, vírgula, traço, ponto e vírgula) e gera a **radiografia estatística completa do lote**.
-    """)
+    st.subheader("📥 Upload, Auditoria Estatística & Conferência de Resultados")
+    st.caption("Carregue seu arquivo de apostas (.txt ou .csv). À esquerda você vê as estatísticas e à direita confere o resultado oficial.")
 
     arquivo_enviado = st.file_uploader(
-        "Carregue seu arquivo de jogos (.txt ou .csv):", 
+        "Carregue seu arquivo de apostas:", 
         type=["txt", "csv"], 
-        help="Cada linha deve conter uma aposta de 6 dezenas (ex: 04 12 18 30 35 54)."
+        help="Cada linha deve conter uma aposta de 6 dezenas."
     )
 
     if arquivo_enviado is not None:
         conteudo = arquivo_enviado.read()
         jogos_carregados, invalidos = processar_arquivo_upload(conteudo)
         st.session_state.jogos_upload = jogos_carregados
-        
         if invalidos > 0:
-            st.warning(f"⚠️ Atenção: {invalidos} linha(s) foram ignoradas por não conterem exatamente 6 dezenas válidas (1 a 60).")
+            st.warning(f"⚠️ {invalidos} linha(s) ignoradas por não conterem 6 dezenas válidas (1 a 60).")
 
     if st.session_state.jogos_upload:
         jogos_up = st.session_state.jogos_upload
         stats_up = calcular_estatisticas_completas(jogos_up)
         total_up = stats_up["total_jogos"]
 
-        st.success(f"✅ **Arquivo Processado com Sucesso:** **{total_up:,} apostas oficiais** identificadas e auditadas!")
+        st.success(f"✅ **Arquivo Ativo:** **{total_up:,} apostas oficiais** carregadas em memória.")
 
-        # 1. CARDS DE RESUMO GERAL
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Total de Jogos", f"{total_up:,}")
-        m2.metric("Soma Média", f"{stats_up['soma_media']:.1f}")
-        m3.metric("Menor Soma", f"{stats_up['soma_min']}")
-        m4.metric("Maior Soma", f"{stats_up['soma_max']}")
-        
-        # Dezenas mais e menos frequentes
-        mais_freq = stats_up["cnt_nums"].most_common(1)[0]
-        m5.metric("Dezena Mais Frequente", f"{mais_freq[0]:02d} ({mais_freq[1]}x)")
+        # DIVISÃO EM 2 COLUNAS PRINCIPAIS
+        col_diag_left, col_conf_right = st.columns([1, 1], gap="large")
 
-        st.divider()
+        # ----------------------------------------------------------------------
+        # COLUNA 1 (ESQUERDA): ESTATÍSTICAS E HEATMAP DAS APOSTAS ENVIADAS
+        # ----------------------------------------------------------------------
+        with col_diag_left:
+            st.markdown("### 📊 Coluna 1: Diagnóstico das Apostas")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total de Jogos", f"{total_up:,}")
+            m2.metric("Soma Média", f"{stats_up['soma_media']:.1f}")
+            mais_freq = stats_up["cnt_nums"].most_common(1)[0]
+            m3.metric("Mais Frequente", f"{mais_freq[0]:02d} ({mais_freq[1]}x)")
 
-        # 2. MAPA TÉRMICO 6x10 DO ARQUIVO ENVIADO
-        st.markdown("#### 🔥 Mapa de Calor 6x10 (Distribuição das Apostas Enviadas)")
-        v_min = min(stats_up["cnt_nums"].values()) if stats_up["cnt_nums"] else 0
-        v_max = max(stats_up["cnt_nums"].values()) if stats_up["cnt_nums"] else 1
-        delta_v = max(1, v_max - v_min)
+            # Mapa de calor 6x10
+            st.markdown("#### 🔥 Frequência na Matriz 6x10")
+            v_min = min(stats_up["cnt_nums"].values()) if stats_up["cnt_nums"] else 0
+            v_max = max(stats_up["cnt_nums"].values()) if stats_up["cnt_nums"] else 1
+            delta_v = max(1, v_max - v_min)
 
-        celulas_up_heat = ""
-        for r in range(6):
-            for c in range(10):
-                n = r * 10 + c + 1
-                freq = stats_up["cnt_nums"][n]
-                ratio = (freq - v_min) / delta_v
-                
-                if freq == 0:
-                    bg = "#f8fafc"
-                    color = "#94a3b8"
-                elif ratio < 0.35:
-                    bg = "#bbf7d0"
-                    color = "#166534"
-                elif ratio < 0.70:
-                    bg = "#fed7aa"
-                    color = "#9a3412"
-                else:
-                    bg = "#fca5a5"
-                    color = "#991b1b"
+            celulas_up_heat = ""
+            for r in range(6):
+                for c in range(10):
+                    n = r * 10 + c + 1
+                    freq = stats_up["cnt_nums"][n]
+                    ratio = (freq - v_min) / delta_v
+                    
+                    if freq == 0:
+                        bg, color = "#f8fafc", "#94a3b8"
+                    elif ratio < 0.35:
+                        bg, color = "#bbf7d0", "#166534"
+                    elif ratio < 0.70:
+                        bg, color = "#fed7aa", "#9a3412"
+                    else:
+                        bg, color = "#fca5a5", "#991b1b"
 
-                celulas_up_heat += f"""
-                <div style="width:46px;height:46px;background:{bg};color:{color};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:1px solid rgba(0,0,0,0.08);box-sizing:border-box;">
-                    <span style="font-size:14px;font-weight:900;">{n:02d}</span>
-                    <span style="font-size:10px;font-weight:700;">{freq}x</span>
-                </div>
-                """
+                    celulas_up_heat += f"""
+                    <div style="width:38px;height:38px;background:{bg};color:{color};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:1px solid rgba(0,0,0,0.08);box-sizing:border-box;">
+                        <span style="font-size:12px;font-weight:900;">{n:02d}</span>
+                        <span style="font-size:9px;font-weight:700;">{freq}x</span>
+                    </div>
+                    """
 
-        html_upload_heatmap = f"""
-        <!DOCTYPE html><html><head><meta charset="utf-8">
-        <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}
-        .box{{background:#fff;border:2px solid #cbd5e1;border-radius:12px;padding:14px;width:fit-content;box-shadow:0 4px 12px rgba(0,0,0,0.05);}}
-        .grid{{display:grid;grid-template-columns:repeat(10,46px);gap:5px;}}</style></head><body>
-        <div class="box"><div style="font-weight:800;color:#15803d;text-align:center;margin-bottom:10px;font-size:14px;">Frequência de Ocorrência na Matriz 6x10</div><div class="grid">{celulas_up_heat}</div></div></body></html>
-        """
-        components.html(html_upload_heatmap, height=360, scrolling=False)
+            html_upload_heatmap = f"""
+            <!DOCTYPE html><html><head><meta charset="utf-8">
+            <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}
+            .box{{background:#fff;border:2px solid #cbd5e1;border-radius:12px;padding:10px;width:fit-content;}}
+            .grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body>
+            <div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>
+            """
+            components.html(html_upload_heatmap, height=290, scrolling=False)
 
-        st.divider()
-
-        # 3. DIAGNÓSTICO DOS 7 QUADROS
-        st.markdown("#### 🔬 Distribuição Estrutural nos 7 Quadros")
-        c_quad1, c_quad2, c_quad3 = st.columns(3)
-
-        with c_quad1:
-            with st.container(border=True):
-                st.markdown("**Quadro: Paridade (Pares x Ímpares)**")
+            # Tabela de Paridade e Primos resumida
+            with st.expander("Ver Divisão de Paridade, Primos e Moldura", expanded=False):
                 df_par = pd.DataFrame([
-                    {"Divisão": f"{p} Pares / {6-p} Ímpares", "Jogos": qtd, "Proporção": f"{(qtd/total_up)*100:.1f}%"}
+                    {"Divisão": f"{p}P / {6-p}I", "Jogos": qtd, "%": f"{(qtd/total_up)*100:.1f}%"}
                     for p, qtd in sorted(stats_up["cnt_pares"].items(), key=lambda x: -x[1])
                 ])
                 st.dataframe(df_par, hide_index=True, use_container_width=True)
 
-        with c_quad2:
-            with st.container(border=True):
-                st.markdown("**Quadro: Primos da Mega-Sena**")
-                df_primos = pd.DataFrame([
-                    {"Qtd Primos": f"{p} Primos", "Jogos": qtd, "Proporção": f"{(qtd/total_up)*100:.1f}%"}
-                    for p, qtd in sorted(stats_up["cnt_primos"].items(), key=lambda x: -x[1])
-                ])
-                st.dataframe(df_primos, hide_index=True, use_container_width=True)
+        # ----------------------------------------------------------------------
+        # COLUNA 2 (DIREITA): CONFERIDOR DE RESULTADOS DO UPLOAD
+        # ----------------------------------------------------------------------
+        with col_conf_right:
+            st.markdown("### 🎯 Coluna 2: Conferência de Resultados")
+            
+            ultimo_sorteio_disp = st.session_state.historico[-1] if st.session_state.historico else [4, 12, 18, 30, 35, 54]
+            txt_padrao_sorteio = " ".join([f"{n:02d}" for n in ultimo_sorteio_disp])
 
-        with c_quad3:
-            with st.container(border=True):
-                st.markdown("**Quadro: Moldura x Miolo**")
-                df_mold = pd.DataFrame([
-                    {"Moldura": f"{m} Moldura / {6-m} Miolo", "Jogos": qtd, "Proporção": f"{(qtd/total_up)*100:.1f}%"}
-                    for m, qtd in sorted(stats_up["cnt_moldura"].items(), key=lambda x: -x[1])
-                ])
-                st.dataframe(df_mold, hide_index=True, use_container_width=True)
+            modo_origem = st.radio(
+                "Origem das 6 dezenas sorteadas:",
+                ["Último Concurso Sincronizado", "Digitar Resultado Manualmente"],
+                horizontal=True
+            )
 
-        # 4. FREQUÊNCIA EM LINHAS, COLUNAS E DIAGONAIS
-        st.markdown("#### 📐 Distribuição em Linhas, Colunas e Diagonais")
-        c_l, c_c, c_d = st.columns(3)
-        with c_l:
-            with st.container(border=True):
-                st.markdown("**Presença por Linha (01 a 06):**")
-                for r in range(1, 7):
-                    tot_l = stats_up["cnt_linhas"][r]
-                    st.write(f"- **Linha {r:02d}:** {tot_l} dezenas ({tot_l/(total_up*6)*100:.1f}%)")
+            if modo_origem == "Último Concurso Sincronizado":
+                dezenas_conferir = ultimo_sorteio_disp
+                st.info(f"🏆 Concurso Ativo: **{' - '.join([f'{n:02d}' for n in dezenas_conferir])}**")
+            else:
+                entrada_manual = st.text_input(
+                    "Digite as 6 dezenas sorteadas (separadas por espaço):",
+                    value=txt_padrao_sorteio
+                )
+                nums_manuais = [int(x) for x in re.findall(r"\b\d+\b", entrada_manual)]
+                dezenas_conferir = sorted(list(set([n for n in nums_manuais if 1 <= n <= 60])))
 
-        with c_c:
-            with st.container(border=True):
-                st.markdown("**Presença por Coluna (01 a 10):**")
-                for c in range(1, 11):
-                    tot_c = stats_up["cnt_colunas"][c]
-                    st.write(f"- **Coluna {c:02d}:** {tot_c} dezenas ({tot_c/(total_up*6)*100:.1f}%)")
+            valido_sorteio = (len(dezenas_conferir) == 6)
 
-        with c_d:
-            with st.container(border=True):
-                st.markdown("**Top Diagonais Crescentes (DC):**")
-                for dc, tot_dc in stats_up["cnt_dc"].most_common(5):
-                    st.write(f"- **DC{dc:02d}:** {tot_dc} dezenas")
+            if not valido_sorteio:
+                st.error("Por favor, informe exatamente 6 dezenas distintas entre 01 e 60.")
+            else:
+                # Executa a conferência em memória
+                relatorio_conf, placar_conf = conferir_apostas_contra_sorteio(jogos_up, dezenas_conferir)
 
-        st.divider()
+                # Cards do Placar de Premiação
+                st.markdown("#### 🏆 Placar de Premiação do Arquivo")
+                c_sena, c_quina, c_quadra, c_terno = st.columns(4)
+                c_sena.metric("Sena (6)", f"{len(placar_conf[6])}")
+                c_quina.metric("Quina (5)", f"{len(placar_conf[5])}")
+                c_quadra.metric("Quadra (4)", f"{len(placar_conf[4])}")
+                c_terno.metric("Terno (3)", f"{len(placar_conf[3])}")
 
-        # 5. INSPEÇÃO NO VOLANTE DOS JOGOS DO UPLOAD
-        st.markdown("#### 🔍 Inspecionar Qualquer Aposta do Arquivo no Volante")
-        idx_up_sel = st.slider("Escolha a aposta para visualizar no volante:", 1, total_up, 1, key="slider_upload")
-        jogo_up_ativo = jogos_up[idx_up_sel - 1]
-        marcadas_up = set(jogo_up_ativo)
+                total_premiadas = len(placar_conf[6]) + len(placar_conf[5]) + len(placar_conf[4])
+                
+                if total_premiadas > 0:
+                    st.balloons()
+                    st.success(f"🎉 **Parabéns!** O lote possui **{total_premiadas} aposta(s) premiada(s)** (Quadra, Quina ou Sena)!")
+                else:
+                    st.warning("Nenhuma aposta alcançou 4, 5 ou 6 acertos neste sorteio.")
 
-        c_vup1, c_vup2 = st.columns([1, 1])
-        with c_vup1:
-            celulas_up = ""
-            for r in range(6):
-                for c in range(10):
-                    n = r * 10 + c + 1
-                    if n in marcadas_up:
-                        celulas_up += f'<div style="width:36px;height:36px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:2px solid #0f5132;font-weight:800;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;box-sizing:border-box;">{n:02d}</div>'
-                    else:
-                        bg = "#f1f5f9" if n in MOLDURA_SET else "#ffffff"
-                        celulas_up += f'<div style="width:36px;height:36px;background:{bg};color:#64748b;border:1px solid #cbd5e1;font-weight:600;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;box-sizing:border-box;">{n:02d}</div>'
+                # Filtro de Exibição
+                filtro_exibir = st.selectbox(
+                    "Filtrar lista de apostas:",
+                    ["Todas as Apostas", "Apenas Premiadas (Sena, Quina e Quadra)", "Apenas com Acertos (1 a 6)"],
+                    index=1 if total_premiadas > 0 else 0
+                )
 
-            html_vup = f"""
-            <!DOCTYPE html><html><head><meta charset="utf-8">
-            <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
-            .box{{background:#fff;border:2px solid #16a34a;border-radius:12px;padding:12px;box-shadow:0 4px 12px rgba(22,163,74,0.12);width:fit-content;}}
-            .grid{{display:grid;grid-template-columns:repeat(10,36px);gap:5px;}}</style></head><body>
-            <div class="box"><div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#15803d;text-align:center;">Aposta #{idx_up_sel:04d}: {' - '.join([f'{n:02d}' for n in jogo_up_ativo])}</div>
-            <div class="grid">{celulas_up}</div></div></body></html>
-            """
-            components.html(html_vup, height=330, scrolling=False)
+                # Filtragem dos dados para a tabela
+                jogos_filtrados_conf = []
+                for item in relatorio_conf:
+                    qtd_a = item["qtd_acertos"]
+                    if filtro_exibir == "Apenas Premiadas (Sena, Quina e Quadra)" and qtd_a < 4:
+                        continue
+                    if filtro_exibir == "Apenas com Acertos (1 a 6)" and qtd_a == 0:
+                        continue
+                    jogos_filtrados_conf.append(item)
 
-        with c_vup2:
-            with st.container(border=True):
-                st.markdown(f"**Raio-X da Aposta #{idx_up_sel:04d}**")
-                p_u = sum(1 for n in jogo_up_ativo if PROPS[n]["is_primo"])
-                pa_u = sum(1 for n in jogo_up_ativo if PROPS[n]["is_par"])
-                mo_u = sum(1 for n in jogo_up_ativo if PROPS[n]["is_moldura"])
-                st.write(f"- **Dezenas:** `{' - '.join([f'{n:02d}' for n in jogo_up_ativo])}`")
-                st.write(f"- **Paridade:** `{pa_u} Pares / {6-pa_u} Ímpares`")
-                st.write(f"- **Primos:** `{p_u}`")
-                st.write(f"- **Moldura:** `{mo_u} dezenas` (Miolo: `{6-mo_u}`)")
-                st.write(f"- **Soma Total:** `{sum(jogo_up_ativo)}`")
+                st.caption(f"Mostrando {len(jogos_filtrados_conf)} aposta(s) conforme filtro:")
+
+                # Renderiza cartões visuais para os primeiros jogos filtrados
+                limite_mostrar = min(len(jogos_filtrados_conf), 30)
+                sorteio_set = set(dezenas_conferir)
+
+                for item in jogos_filtrados_conf[:limite_mostrar]:
+                    idx_j = item["num_aposta"]
+                    acertos_count = item["qtd_acertos"]
+                    badge_premio = ""
+                    if acertos_count == 6: badge_premio = "🏆 **SENA!**"
+                    elif acertos_count == 5: badge_premio = "🥈 **QUINA!**"
+                    elif acertos_count == 4: badge_premio = "🥉 **QUADRA!**"
+
+                    # Monta as bolinhas: verde para acerto, cinza para erro
+                    bolinhas_html = "".join([
+                        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;"
+                        f"background:{'#16a34a' if n in sorteio_set else '#f1f5f9'};"
+                        f"color:{'#ffffff' if n in sorteio_set else '#475569'};"
+                        f"font-weight:800;font-size:12px;border-radius:50%;margin:0 2px;"
+                        f"border:1px solid {'#15803d' if n in sorteio_set else '#cbd5e1'};font-family:monospace;'>{n:02d}</span>"
+                        for n in item["jogo"]
+                    ])
+
+                    st.markdown(
+                        f"""
+                        <div style="background:#ffffff;border:1px solid {'#22c55e' if acertos_count >= 4 else '#e2e8f0'};border-left:4px solid {'#16a34a' if acertos_count >= 4 else '#94a3b8'};border-radius:8px;padding:8px 12px;margin:6px 0;display:flex;justify-content:space-between;align-items:center;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span style="font-weight:700;font-size:13px;">Jogo #{idx_j:03d}</span>
+                                <div>{bolinhas_html}</div>
+                            </div>
+                            <div>
+                                <span style="background:{'#dcfce7' if acertos_count >= 4 else '#f1f5f9'};color:{'#15803d' if acertos_count >= 4 else '#64748b'};padding:3px 8px;border-radius:10px;font-size:12px;font-weight:700;">
+                                    {acertos_count} acertos {badge_premio}
+                                </span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                # Exportação de Premiadas
+                if total_premiadas > 0:
+                    jogos_premiados_txt = "\n".join([
+                        f"{' '.join([f'{n:02d}' for n in it['jogo']])} | {it['qtd_acertos']} ACERTOS"
+                        for it in relatorio_conf if it["qtd_acertos"] >= 4
+                    ])
+                    st.download_button(
+                        "📥 Baixar Apenas Apostas Premiadas (.TXT)",
+                        data=jogos_premiados_txt,
+                        file_name=f"apostas_premiadas_mega60_{total_premiadas}.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
     else:
-        st.info("Faça o upload de um arquivo com apostas acima para gerar o diagnóstico estatístico completo.")
+        st.info("Envie um arquivo de apostas no topo da página para habilitar o diagnóstico e a conferência.")
 
 # ==============================================================================
 # ABA 4: HISTÓRICO
@@ -799,7 +842,7 @@ with tab_historico:
                 r = requests.get(url, headers=headers, timeout=5)
                 if r.status_code == 200:
                     ult = r.json()
-                    st.success(f"Conexão bem-sucedida! Concurso oficial #{ult['numero']}")
+                    st.success(f"Conexão bem-sucedida! Último concurso oficial: #{ult['numero']}")
                 else:
                     st.warning("Servidor da Caixa indisponível no momento.")
             except Exception as e:
