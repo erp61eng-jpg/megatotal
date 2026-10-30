@@ -6,9 +6,7 @@ from collections import Counter
 import math
 import time
 import re
-import random
 import json
-import pandas as pd
 
 st.set_page_config(
     page_title="MEGA60 - Cartela Virtual, Filtros & Sistema de Elliott",
@@ -31,6 +29,8 @@ MOLDURA_SET = (
     {r * 10 + 10 for r in range(6)}
 )
 
+TOP_LINHA_01 = {2, 4, 5, 8, 10}
+
 FALLBACK_MEGASENA = [
     [4, 12, 18, 30, 35, 54], [1, 9, 15, 23, 44, 52], [7, 14, 27, 39, 48, 59],
     [10, 11, 25, 33, 42, 58], [3, 16, 28, 37, 45, 60], [5, 20, 22, 34, 49, 56],
@@ -41,18 +41,27 @@ FALLBACK_MEGASENA = [
     [6, 13, 29, 40, 46, 51], [12, 19, 32, 41, 50, 58]
 ]
 
+# Tabelas de consulta rápida (Lookups para aceleração)
+PAR_LOOKUP = [False] + [(n % 2 == 0) for n in range(1, 61)]
+PRIMO_LOOKUP = [False] + [(n in PRIMOS_MEGASENA) for n in range(1, 61)]
+MOLDURA_LOOKUP = [False] + [(n in MOLDURA_SET) for n in range(1, 61)]
+ROW_LOOKUP = [0] + [(n - 1) // 10 for n in range(1, 61)]
+COL_LOOKUP = [0] + [(n - 1) % 10 for n in range(1, 61)]
+DC_LOOKUP = [0] + [(((n - 1) % 10) + ((n - 1) // 10)) % 10 for n in range(1, 61)]
+DD_LOOKUP = [0] + [(((n - 1) % 10) - ((n - 1) // 10)) % 10 for n in range(1, 61)]
+
 PROPS = {}
 for n in range(1, 61):
-    r = (n - 1) // 10
-    c = (n - 1) % 10
+    r = ROW_LOOKUP[n]
+    c = COL_LOOKUP[n]
     PROPS[n] = {
         "r": r,
         "c": c,
-        "dc": (c + r) % 10,
-        "dd": (c - r) % 10,
-        "is_primo": n in PRIMOS_MEGASENA,
-        "is_par": n % 2 == 0,
-        "is_moldura": n in MOLDURA_SET,
+        "dc": DC_LOOKUP[n],
+        "dd": DD_LOOKUP[n],
+        "is_primo": PRIMO_LOOKUP[n],
+        "is_par": PAR_LOOKUP[n],
+        "is_moldura": MOLDURA_LOOKUP[n],
         "is_fib": n in FIBONACCI_MEGASENA
     }
 
@@ -71,6 +80,16 @@ OPCOES_QUANTIDADE = {
 }
 
 PRESETS_PADRAO = {
+    "⭐ Filtro Mestre: Duplas & Top L01": {
+        "linhas": ["1 ou 2", "0 a 2", "0 a 2", "0 a 2", "0 a 2", "0 a 2"],
+        "colunas": ["0 a 2"] * 10,
+        "diag_cresc": ["0 a 2"] * 10,
+        "diag_decresc": ["0 a 2"] * 10,
+        "primos": [1, 2, 3],
+        "pares": ["3P / 3I", "4P / 2I", "2P / 4I"],
+        "moldura": [2, 3, 4],
+        "soma": (120, 245)
+    },
     "MEGA60: 1 por Linha Padrão (6 Dezenas)": {
         "linhas": ["Exatamente 1"] * 6,
         "colunas": ["0 ou 1"] * 10,
@@ -104,7 +123,7 @@ PRESETS_PADRAO = {
 }
 
 # ==============================================================================
-# MOTOR TÉRMICO DE ELLIOTT (CICLOS, RETRAÇÕES & MOMENTUM)
+# MOTOR TÉRMICO DE ELLIOTT
 # ==============================================================================
 def calcular_metricas_elliott(historico):
     total = len(historico)
@@ -144,48 +163,65 @@ def calcular_metricas_elliott(historico):
     return dados
 
 # ==============================================================================
-# MOTOR MATEMÁTICO: VALIDAÇÃO DOS JOGOS
+# MOTOR MATEMÁTICO: VALIDAÇÃO DE ALTA VELOCIDADE
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
-    soma_j = sum(jogo)
+    # 1. Curto-circuito por soma
+    soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
     if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
         return False
 
-    pares_cnt = sum(1 for n in jogo if PROPS[n]["is_par"])
+    # 2. Curto-circuito por paridade
+    pares_cnt = (
+        PAR_LOOKUP[jogo[0]] + PAR_LOOKUP[jogo[1]] + PAR_LOOKUP[jogo[2]] +
+        PAR_LOOKUP[jogo[3]] + PAR_LOOKUP[jogo[4]] + PAR_LOOKUP[jogo[5]]
+    )
     if pares_cnt not in cfg["pares_aceitos"]:
         return False
 
-    primos_cnt = sum(1 for n in jogo if PROPS[n]["is_primo"])
+    # 3. Curto-circuito por primos e moldura
+    primos_cnt = (
+        PRIMO_LOOKUP[jogo[0]] + PRIMO_LOOKUP[jogo[1]] + PRIMO_LOOKUP[jogo[2]] +
+        PRIMO_LOOKUP[jogo[3]] + PRIMO_LOOKUP[jogo[4]] + PRIMO_LOOKUP[jogo[5]]
+    )
     if primos_cnt not in cfg["primos_aceitos"]:
         return False
 
-    moldura_cnt = sum(1 for n in jogo if PROPS[n]["is_moldura"])
+    moldura_cnt = (
+        MOLDURA_LOOKUP[jogo[0]] + MOLDURA_LOOKUP[jogo[1]] + MOLDURA_LOOKUP[jogo[2]] +
+        MOLDURA_LOOKUP[jogo[3]] + MOLDURA_LOOKUP[jogo[4]] + MOLDURA_LOOKUP[jogo[5]]
+    )
     if moldura_cnt not in cfg["moldura_aceita"]:
         return False
 
+    # 4. Distribuição matricial (Linhas, Colunas e Diagonais)
+    linhas_count = [0] * 6
     cols_count = [0] * 10
     dc_count = [0] * 10
     dd_count = [0] * 10
-    linhas_count = [0] * 6
 
     for n in jogo:
-        p = PROPS[n]
-        linhas_count[p["r"]] += 1
-        if linhas_count[p["r"]] > cfg["linhas"][p["r"]][1]:
+        r = ROW_LOOKUP[n]
+        linhas_count[r] += 1
+        if linhas_count[r] > cfg["linhas"][r][1]:
             return False
 
-        cols_count[p["c"]] += 1
-        if cols_count[p["c"]] > cfg["colunas"][p["c"]][1]:
+        c = COL_LOOKUP[n]
+        cols_count[c] += 1
+        if cols_count[c] > cfg["colunas"][c][1]:
             return False
 
-        dc_count[p["dc"]] += 1
-        if dc_count[p["dc"]] > cfg["diag_cresc"][p["dc"]][1]:
+        dc = DC_LOOKUP[n]
+        dc_count[dc] += 1
+        if dc_count[dc] > cfg["diag_cresc"][dc][1]:
             return False
 
-        dd_count[p["dd"]] += 1
-        if dd_count[p["dd"]] > cfg["diag_decresc"][p["dd"]][1]:
+        dd = DD_LOOKUP[n]
+        dd_count[dd] += 1
+        if dd_count[dd] > cfg["diag_decresc"][dd][1]:
             return False
 
+    # Verificação de limites mínimos
     for r in range(6):
         if linhas_count[r] < cfg["linhas"][r][0]:
             return False
@@ -217,7 +253,7 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
 
     jogos_aprovados = []
     testadas = 0
-    lote_update = max(100, min(50000, total_combinacoes // 50))
+    lote_update = max(200, min(80000, total_combinacoes // 40))
 
     for comb in combinations(dezenas_candidatas, 6):
         testadas += 1
@@ -333,7 +369,7 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
     components.html(html, height=330, scrolling=False)
 
 # ==============================================================================
-# INICIALIZAÇÃO DE ESTADO COM BLINDAGEM DE TIPO
+# INICIALIZAÇÃO DE ESTADO COM FILTRO MESTRE NA ENTRADA
 # ==============================================================================
 if "historico" not in st.session_state:
     st.session_state.historico = [list(j) for j in FALLBACK_MEGASENA]
@@ -348,22 +384,15 @@ if "jogos_upload" not in st.session_state:
 if "presets_filtros" not in st.session_state:
     st.session_state.presets_filtros = PRESETS_PADRAO.copy()
 
-# Cálculo térmico de Elliott
 dados_calor = calcular_metricas_elliott(st.session_state.historico)
 ranking_elliott = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
 top_40_dezenas = {item["numero"] for item in ranking_elliott[:40]}
 
-# Blindagem estrita do pool_trabalho como set
-if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.pool_trabalho, set):
-    st.session_state.pool_trabalho = top_40_dezenas.copy()
+# Incorpora as melhores da Linha 01 no pool de trabalho ativo
+pool_inicial = (top_40_dezenas | TOP_LINHA_01)
 
-def toggle_dezena(n):
-    if not isinstance(st.session_state.pool_trabalho, set):
-        st.session_state.pool_trabalho = set(st.session_state.pool_trabalho)
-    if n in st.session_state.pool_trabalho:
-        st.session_state.pool_trabalho.remove(n)
-    else:
-        st.session_state.pool_trabalho.add(n)
+if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.pool_trabalho, set):
+    st.session_state.pool_trabalho = pool_inicial.copy()
 
 def aplicar_preset(nome_preset):
     cfg_p = st.session_state.presets_filtros.get(nome_preset)
@@ -380,7 +409,20 @@ def aplicar_preset(nome_preset):
     st.session_state["sel_moldura"] = cfg_p["moldura"]
     st.session_state["sel_soma"] = tuple(cfg_p["soma"])
 
-# Auxiliar de cores para a escala térmica
+# Carga automática do Filtro Mestre na primeira execução
+if "filtro_inicial_carregado" not in st.session_state:
+    aplicar_preset("⭐ Filtro Mestre: Duplas & Top L01")
+    st.session_state.filtro_inicial_carregado = True
+
+def toggle_dezena(n):
+    if not isinstance(st.session_state.pool_trabalho, set):
+        st.session_state.pool_trabalho = set(st.session_state.pool_trabalho)
+    if n in st.session_state.pool_trabalho:
+        st.session_state.pool_trabalho.remove(n)
+    else:
+        st.session_state.pool_trabalho.add(n)
+
+# Auxiliar de cores térmicas
 max_sc = max(d["score"] for d in dados_calor.values())
 min_sc = min(d["score"] for d in dados_calor.values())
 delta_sc = max(0.1, max_sc - min_sc)
@@ -403,7 +445,7 @@ st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
 st.caption("Matriz 6x10 com Dinâmica de Ondas • Varredura dos 7 Quadros • Gravação de Predefinições • Conferidor Oficial")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
-    "🎟️ Cartela Térmica (Top 40 Elliott)",
+    "🎟️ Cartela Térmica (Pool Ativo)",
     "🎛️ Filtros & Gravação",
     "🗺️ Volante & Raio-X",
     "📥 Upload & Conferência",
@@ -419,8 +461,8 @@ with tab_cartela:
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
-        if st.button("🌊 Restaurar Top 40 Elliott", use_container_width=True):
-            st.session_state.pool_trabalho = top_40_dezenas.copy()
+        if st.button("🌊 Restaurar Top 40 + Top L01", use_container_width=True):
+            st.session_state.pool_trabalho = (top_40_dezenas | TOP_LINHA_01).copy()
             st.rerun()
     with c_b2:
         if st.button("🔥 Apenas Quentes (Top 20)", use_container_width=True):
@@ -511,7 +553,7 @@ with tab_config:
 
         with col_gravar:
             st.markdown("**💾 Gravar Configuração Atual:**")
-            nome_novo_filtro = st.text_input("Nome da nova predefinição:", placeholder="Ex: Elliott 3P/3I Equilibrada", key="input_nome_filtro")
+            nome_novo_filtro = st.text_input("Nome da nova predefinição:", placeholder="Ex: Duplas Personalizadas", key="input_nome_filtro")
             
             c_grv1, c_grv2 = st.columns(2)
             with c_grv1:
@@ -520,14 +562,14 @@ with tab_config:
                         st.error("Informe um nome para a predefinição.")
                     else:
                         novo_preset = {
-                            "linhas": [st.session_state.get(f"sel_l_{r}", "Livre (0 a 6)") for r in range(6)],
-                            "colunas": [st.session_state.get(f"sel_c_{c}", "0 ou 1") for c in range(10)],
-                            "diag_cresc": [st.session_state.get(f"sel_dc_{d}", "0 ou 1") for d in range(10)],
-                            "diag_decresc": [st.session_state.get(f"sel_dd_{d}", "0 ou 1") for d in range(10)],
-                            "primos": st.session_state.get("sel_primos", [1, 2]),
-                            "pares": st.session_state.get("sel_pares", ["3P / 3I", "2P / 4I", "4P / 2I"]),
+                            "linhas": [st.session_state.get(f"sel_l_{r}", "0 a 2") for r in range(6)],
+                            "colunas": [st.session_state.get(f"sel_c_{c}", "0 a 2") for c in range(10)],
+                            "diag_cresc": [st.session_state.get(f"sel_dc_{d}", "0 a 2") for d in range(10)],
+                            "diag_decresc": [st.session_state.get(f"sel_dd_{d}", "0 a 2") for d in range(10)],
+                            "primos": st.session_state.get("sel_primos", [1, 2, 3]),
+                            "pares": st.session_state.get("sel_pares", ["3P / 3I", "4P / 2I", "2P / 4I"]),
                             "moldura": st.session_state.get("sel_moldura", [2, 3, 4]),
-                            "soma": st.session_state.get("sel_soma", (110, 240))
+                            "soma": st.session_state.get("sel_soma", (120, 245))
                         }
                         st.session_state.presets_filtros[nome_novo_filtro.strip()] = novo_preset
                         st.success(f"Predefinição '{nome_novo_filtro.strip()}' gravada!")
@@ -552,7 +594,9 @@ with tab_config:
         opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
         for r in range(6):
             with cols_l[r]:
-                esc = st.selectbox(f"Linha {r+1:02d}", opcoes_nomes, index=0, key=f"sel_l_{r}")
+                val_padrao = st.session_state.get(f"sel_l_{r}", "1 ou 2" if r == 0 else "0 a 2")
+                idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 0
+                esc = st.selectbox(f"Linha {r+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_l_{r}")
                 limites_linhas.append(OPCOES_QUANTIDADE[esc])
 
     # Colunas
@@ -563,7 +607,9 @@ with tab_config:
         for c in range(10):
             alvo = cols_c_up[c] if c < 5 else cols_c_dw[c - 5]
             with alvo:
-                esc = st.selectbox(f"Coluna {c+1:02d}", opcoes_nomes, index=6, key=f"sel_c_{c}")
+                val_padrao = st.session_state.get(f"sel_c_{c}", "0 a 2")
+                idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                esc = st.selectbox(f"Coluna {c+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_c_{c}")
                 limites_colunas.append(OPCOES_QUANTIDADE[esc])
 
     # Diagonais
@@ -574,7 +620,9 @@ with tab_config:
             with st.expander("Expandir Diagonais Crescentes", expanded=False):
                 limites_dc = []
                 for d in range(10):
-                    esc = st.selectbox(f"DC{d+1:02d}", opcoes_nomes, index=6, key=f"sel_dc_{d}")
+                    val_padrao = st.session_state.get(f"sel_dc_{d}", "0 a 2")
+                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                    esc = st.selectbox(f"DC{d+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_dc_{d}")
                     limites_dc.append(OPCOES_QUANTIDADE[esc])
     with c_diag2:
         with st.container(border=True):
@@ -582,7 +630,9 @@ with tab_config:
             with st.expander("Expandir Diagonais Decrescentes", expanded=False):
                 limites_dd = []
                 for d in range(10):
-                    esc = st.selectbox(f"DD{d+1:02d}", opcoes_nomes, index=6, key=f"sel_dd_{d}")
+                    val_padrao = st.session_state.get(f"sel_dd_{d}", "0 a 2")
+                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                    esc = st.selectbox(f"DD{d+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_dd_{d}")
                     limites_dd.append(OPCOES_QUANTIDADE[esc])
 
     # Primos, Pares, Moldura e Faixa de Soma
@@ -590,15 +640,15 @@ with tab_config:
         st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
         with c_p1:
-            primos_sel = st.multiselect("Quantidade de Primos:", list(range(7)), default=[1, 2], key="sel_primos")
+            primos_sel = st.multiselect("Quantidade de Primos:", list(range(7)), default=st.session_state.get("sel_primos", [1, 2, 3]), key="sel_primos")
         with c_p2:
             opcoes_par = {"3P / 3I": 3, "2P / 4I": 2, "4P / 2I": 4, "1P / 5I": 1, "5P / 1I": 5, "0P / 6I": 0, "6P / 0I": 6}
-            par_sel = st.multiselect("Pares / Ímpares:", list(opcoes_par.keys()), default=["3P / 3I", "2P / 4I", "4P / 2I"], key="sel_pares")
+            par_sel = st.multiselect("Pares / Ímpares:", list(opcoes_par.keys()), default=st.session_state.get("sel_pares", ["3P / 3I", "4P / 2I", "2P / 4I"]), key="sel_pares")
             pares_valores = {opcoes_par[k] for k in par_sel}
         with c_p3:
-            moldura_sel = st.multiselect("Dezenas na Moldura:", list(range(7)), default=[2, 3, 4], key="sel_moldura")
+            moldura_sel = st.multiselect("Dezenas na Moldura:", list(range(7)), default=st.session_state.get("sel_moldura", [2, 3, 4]), key="sel_moldura")
         with c_p4:
-            faixa_soma = st.slider("Faixa de Soma:", 50, 320, (110, 240), key="sel_soma")
+            faixa_soma = st.slider("Faixa de Soma:", 50, 320, st.session_state.get("sel_soma", (120, 245)), key="sel_soma")
 
     config_total = {
         "linhas": limites_linhas,
@@ -817,7 +867,6 @@ with tab_upload:
                 else:
                     st.warning("Nenhuma aposta alcançou 4, 5 ou 6 acertos neste sorteio.")
 
-                # Seleção individual para conferência no volante
                 jogos_com_acerto = [it for it in relatorio_conf if it["qtd_acertos"] >= 4] or relatorio_conf
                 opcoes_map = {
                     it["num_aposta"]: f"Aposta #{it['num_aposta']:04d} — {it['qtd_acertos']} acertos"
@@ -850,7 +899,7 @@ with tab_historico:
             try:
                 r = requests.get(
                     "https://servicebus2.caixa.gov.br/portaldeloterias/api/megasena",
-                    headers={"User-Agent": "Mozilla/5.0"},
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
                     timeout=7
                 )
                 if r.status_code == 200:
