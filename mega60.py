@@ -7,6 +7,9 @@ import math
 import time
 import re
 import json
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 st.set_page_config(
     page_title="MEGA60 - Cartela Virtual, Filtros & Sistema de Elliott",
@@ -15,7 +18,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# CONSTANTES, PROPRIEDADES E ESTRUTURA DA MATRIZ 6x10
+# CONSTANTES E ESTRUTURA DA MATRIZ 6x10
 # ==============================================================================
 TOTAL_NUMS = 60
 TAMANHO_JOGO_FINAL = 6
@@ -23,9 +26,9 @@ FIBONACCI_MEGASENA = {1, 2, 3, 5, 8, 13, 21, 34, 55}
 PRIMOS_MEGASENA = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59}
 
 MOLDURA_SET = (
-    set(range(1, 11)) | 
-    set(range(51, 61)) | 
-    {r * 10 + 1 for r in range(6)} | 
+    set(range(1, 11)) |
+    set(range(51, 61)) |
+    {r * 10 + 1 for r in range(6)} |
     {r * 10 + 10 for r in range(6)}
 )
 
@@ -41,7 +44,6 @@ FALLBACK_MEGASENA = [
     [6, 13, 29, 40, 46, 51], [12, 19, 32, 41, 50, 58]
 ]
 
-# Lookups vetorizados para validação rápida
 PAR_LOOKUP = [False] + [(n % 2 == 0) for n in range(1, 61)]
 PRIMO_LOOKUP = [False] + [(n in PRIMOS_MEGASENA) for n in range(1, 61)]
 MOLDURA_LOOKUP = [False] + [(n in MOLDURA_SET) for n in range(1, 61)]
@@ -52,11 +54,9 @@ DD_LOOKUP = [0] + [(((n - 1) % 10) - ((n - 1) // 10)) % 10 for n in range(1, 61)
 
 PROPS = {}
 for n in range(1, 61):
-    r = ROW_LOOKUP[n]
-    c = COL_LOOKUP[n]
     PROPS[n] = {
-        "r": r,
-        "c": c,
+        "r": ROW_LOOKUP[n],
+        "c": COL_LOOKUP[n],
         "dc": DC_LOOKUP[n],
         "dd": DD_LOOKUP[n],
         "is_primo": PRIMO_LOOKUP[n],
@@ -81,50 +81,10 @@ OPCOES_QUANTIDADE = {
 
 PRESETS_PADRAO = {
     "FILTRO3010": {
-        "linhas": [
-            "Exatamente 2",
-            "Exatamente 1",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "Exatamente 1",
-            "Exatamente 1"
-        ],
-        "colunas": [
-            "Exatamente 1",
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "Exatamente 1",
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "Exatamente 2",
-            "Exatamente 1"
-        ],
-        "diag_cresc": [
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "Exatamente 1",
-            "Exatamente 2",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "0 (Nenhuma)"
-        ],
-        "diag_decresc": [
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "Exatamente 2",
-            "0 (Nenhuma)",
-            "Exatamente 2",
-            "0 (Nenhuma)",
-            "Exatamente 1",
-            "0 (Nenhuma)"
-        ],
+        "linhas": ["Exatamente 2", "Exatamente 1", "0 (Nenhuma)", "Exatamente 1", "Exatamente 1", "Exatamente 1"],
+        "colunas": ["Exatamente 1", "0 (Nenhuma)", "0 (Nenhuma)", "0 (Nenhuma)", "Exatamente 1", "Exatamente 1", "0 (Nenhuma)", "0 (Nenhuma)", "Exatamente 2", "Exatamente 1"],
+        "diag_cresc": ["0 (Nenhuma)", "0 (Nenhuma)", "Exatamente 1", "Exatamente 1", "Exatamente 2", "0 (Nenhuma)", "Exatamente 1", "0 (Nenhuma)", "Exatamente 1", "0 (Nenhuma)"],
+        "diag_decresc": ["0 (Nenhuma)", "0 (Nenhuma)", "0 (Nenhuma)", "Exatamente 1", "Exatamente 2", "0 (Nenhuma)", "Exatamente 2", "0 (Nenhuma)", "Exatamente 1", "0 (Nenhuma)"],
         "primos": [3],
         "pares": ["2P / 4I"],
         "moldura": [5],
@@ -153,30 +113,22 @@ PRESETS_PADRAO = {
 }
 
 # ==============================================================================
-# ENGENHARIA REVERSA: EXTRAÇÃO AUTOMÁTICA DE FILTROS A PARTIR DE 6 DEZENAS
+# ENGENHARIA REVERSA ESCALÁVEL (6 ATÉ 60 DEZENAS)
 # ==============================================================================
 def mapear_quantidade_para_rotulo(qtd, modo="exato"):
     if modo == "exato":
-        mapa = {
-            0: "0 (Nenhuma)",
-            1: "Exatamente 1",
-            2: "Exatamente 2",
-            3: "Exatamente 3",
-            4: "Exatamente 4"
-        }
+        mapa = {0: "0 (Nenhuma)", 1: "Exatamente 1", 2: "Exatamente 2", 3: "Exatamente 3", 4: "Exatamente 4"}
         return mapa.get(qtd, "Livre (0 a 6)")
-    else:
-        return "0 a 2" if qtd <= 2 else "Livre (0 a 6)"
+    return "0 a 2" if qtd <= 2 else "Livre (0 a 6)"
 
-def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=20):
+def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
     dezenas = sorted(list(set(dezenas)))
-    if len(dezenas) != 6:
+    total_dezenas = len(dezenas)
+    if not (6 <= total_dezenas <= 60):
         return None
 
-    l_cnt = [0] * 6
-    c_cnt = [0] * 10
-    dc_cnt = [0] * 10
-    dd_cnt = [0] * 10
+    l_cnt, c_cnt = [0] * 6, [0] * 10
+    dc_cnt, dd_cnt = [0] * 10, [0] * 10
 
     for n in dezenas:
         l_cnt[ROW_LOOKUP[n]] += 1
@@ -184,37 +136,86 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=20):
         dc_cnt[DC_LOOKUP[n]] += 1
         dd_cnt[DD_LOOKUP[n]] += 1
 
-    pares = sum(1 for n in dezenas if PAR_LOOKUP[n])
-    primos = sum(1 for n in dezenas if PRIMO_LOOKUP[n])
-    moldura = sum(1 for n in dezenas if MOLDURA_LOOKUP[n])
+    pares_total = sum(1 for n in dezenas if PAR_LOOKUP[n])
+    primos_total = sum(1 for n in dezenas if PRIMO_LOOKUP[n])
+    moldura_total = sum(1 for n in dezenas if MOLDURA_LOOKUP[n])
     soma_total = sum(dezenas)
 
-    if modo == "exato":
-        return {
-            "linhas": [mapear_quantidade_para_rotulo(q, "exato") for q in l_cnt],
-            "colunas": [mapear_quantidade_para_rotulo(q, "exato") for q in c_cnt],
-            "diag_cresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dc_cnt],
-            "diag_decresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dd_cnt],
-            "primos": [primos],
-            "pares": [f"{pares}P / {6 - pares}I"],
-            "moldura": [moldura],
-            "soma": (max(50, soma_total - margem_soma), min(320, soma_total + margem_soma))
-        }
-    else:
-        primos_range = sorted(list({max(0, primos - 1), primos, min(6, primos + 1)}))
-        moldura_range = sorted(list({max(0, moldura - 1), moldura, min(6, moldura + 1)}))
-        pares_opcoes = list({f"{pares}P / {6 - pares}I", "3P / 3I", "4P / 2I", "2P / 4I"})
+    # Caso 1: Exatamente 6 dezenas (resultado direto de concurso)
+    if total_dezenas == 6:
+        if modo == "exato":
+            return {
+                "linhas": [mapear_quantidade_para_rotulo(q, "exato") for q in l_cnt],
+                "colunas": [mapear_quantidade_para_rotulo(q, "exato") for q in c_cnt],
+                "diag_cresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dc_cnt],
+                "diag_decresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dd_cnt],
+                "primos": [primos_total],
+                "pares": [f"{pares_total}P / {6 - pares_total}I"],
+                "moldura": [moldura_total],
+                "soma": (max(50, soma_total - margem_soma), min(320, soma_total + margem_soma))
+            }
+        else:
+            primos_range = sorted(list({max(0, primos_total - 1), primos_total, min(6, primos_total + 1)}))
+            moldura_range = sorted(list({max(0, moldura_total - 1), moldura_total, min(6, moldura_total + 1)}))
+            pares_opcoes = list({f"{pares_total}P / {6 - pares_total}I", "3P / 3I", "4P / 2I", "2P / 4I"})
+            return {
+                "linhas": ["1 ou 2" if l_cnt[0] in (1, 2) else "0 a 2"] + ["0 a 2"] * 5,
+                "colunas": ["0 a 2"] * 10,
+                "diag_cresc": ["0 a 2"] * 10,
+                "diag_decresc": ["0 a 2"] * 10,
+                "primos": primos_range,
+                "pares": pares_opcoes,
+                "moldura": moldura_range,
+                "soma": (max(50, soma_total - 30), min(320, soma_total + 30))
+            }
 
-        return {
-            "linhas": ["1 ou 2" if l_cnt[0] in (1, 2) else "0 a 2"] + ["0 a 2"] * 5,
-            "colunas": ["0 a 2"] * 10,
-            "diag_cresc": ["0 a 2"] * 10,
-            "diag_decresc": ["0 a 2"] * 10,
-            "primos": primos_range,
-            "pares": pares_opcoes,
-            "moldura": moldura_range,
-            "soma": (max(50, soma_total - 30), min(320, soma_total + 30))
-        }
+    # Caso 2: Grupo ampliado (7 a 60 dezenas)
+    def converter_contagem_grupo(qtd):
+        if qtd == 0:
+            return "0 (Nenhuma)"
+        elif qtd == 1:
+            return "0 ou 1"
+        elif qtd <= 3:
+            return "0 a 2"
+        elif qtd <= 5:
+            return "1 a 3"
+        return "Livre (0 a 6)"
+
+    linhas_filt = [converter_contagem_grupo(q) for q in l_cnt]
+    colunas_filt = [converter_contagem_grupo(q) for q in c_cnt]
+    dc_filt = [converter_contagem_grupo(q) for q in dc_cnt]
+    dd_filt = [converter_contagem_grupo(q) for q in dd_cnt]
+
+    prop_primo = primos_total / total_dezenas
+    esperado_primo = int(round(prop_primo * 6))
+    primos_range = sorted(list({max(0, esperado_primo - 1), esperado_primo, min(6, esperado_primo + 1)}))
+    if not primos_range:
+        primos_range = [1, 2, 3]
+
+    prop_par = pares_total / total_dezenas
+    esperado_par = int(round(prop_par * 6))
+    esperado_par = max(1, min(5, esperado_par))
+    pares_opcoes = list({f"{esperado_par}P / {6 - esperado_par}I", "3P / 3I", "4P / 2I", "2P / 4I"})
+
+    prop_moldura = moldura_total / total_dezenas
+    esperado_moldura = int(round(prop_moldura * 6))
+    moldura_range = sorted(list({max(1, esperado_moldura - 1), esperado_moldura, min(5, esperado_moldura + 1)}))
+
+    media_dezena = soma_total / total_dezenas
+    soma_esperada = int(media_dezena * 6)
+    delta_soma = 40 if modo == "flexivel" else 28
+    faixa_soma = (max(50, soma_esperada - delta_soma), min(320, soma_esperada + delta_soma))
+
+    return {
+        "linhas": linhas_filt,
+        "colunas": colunas_filt,
+        "diag_cresc": dc_filt,
+        "diag_decresc": dd_filt,
+        "primos": primos_range,
+        "pares": pares_opcoes,
+        "moldura": moldura_range,
+        "soma": faixa_soma
+    }
 
 # ==============================================================================
 # MOTOR TÉRMICO DE ELLIOTT
@@ -257,7 +258,7 @@ def calcular_metricas_elliott(historico):
     return dados
 
 # ==============================================================================
-# MOTOR MATEMÁTICO: VALIDAÇÃO DE ALTA PERFORMANCE
+# MOTOR COMBINATÓRIO
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
@@ -285,42 +286,42 @@ def validar_aposta_final_6(jogo, cfg):
     if moldura_cnt not in cfg["moldura_aceita"]:
         return False
 
-    linhas_count = [0] * 6
-    cols_count = [0] * 10
-    dc_count = [0] * 10
-    dd_count = [0] * 10
+    l_cnt = [0] * 6
+    c_cnt = [0] * 10
+    dc_cnt = [0] * 10
+    dd_cnt = [0] * 10
 
     for n in jogo:
         r = ROW_LOOKUP[n]
-        linhas_count[r] += 1
-        if linhas_count[r] > cfg["linhas"][r][1]:
+        l_cnt[r] += 1
+        if l_cnt[r] > cfg["linhas"][r][1]:
             return False
 
         c = COL_LOOKUP[n]
-        cols_count[c] += 1
-        if cols_count[c] > cfg["colunas"][c][1]:
+        c_cnt[c] += 1
+        if c_cnt[c] > cfg["colunas"][c][1]:
             return False
 
         dc = DC_LOOKUP[n]
-        dc_count[dc] += 1
-        if dc_count[dc] > cfg["diag_cresc"][dc][1]:
+        dc_cnt[dc] += 1
+        if dc_cnt[dc] > cfg["diag_cresc"][dc][1]:
             return False
 
         dd = DD_LOOKUP[n]
-        dd_count[dd] += 1
-        if dd_count[dd] > cfg["diag_decresc"][dd][1]:
+        dd_cnt[dd] += 1
+        if dd_cnt[dd] > cfg["diag_decresc"][dd][1]:
             return False
 
     for r in range(6):
-        if linhas_count[r] < cfg["linhas"][r][0]:
+        if l_cnt[r] < cfg["linhas"][r][0]:
             return False
 
     for c in range(10):
-        if cols_count[c] < cfg["colunas"][c][0]:
+        if c_cnt[c] < cfg["colunas"][c][0]:
             return False
 
     for d in range(10):
-        if dc_count[d] < cfg["diag_cresc"][d][0] or dd_count[d] < cfg["diag_decresc"][d][0]:
+        if dc_cnt[d] < cfg["diag_cresc"][d][0] or dd_cnt[d] < cfg["diag_decresc"][d][0]:
             return False
 
     return True
@@ -331,18 +332,18 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
     k_escolhidas = len(dezenas_candidatas)
 
     if k_escolhidas < 6:
-        container_status.error("Selecione pelo menos 6 dezenas na cartela para gerar apostas.")
+        container_status.error("Selecione pelo menos 6 dezenas no pool para gerar apostas.")
         return []
 
     total_combinacoes = math.comb(k_escolhidas, 6)
     container_status.write(
         f"🎯 **Varredura Ativa:** {k_escolhidas} dezenas selecionadas. "
-        f"Espaço total: **{total_combinacoes:,} jogos de 6 números**."
+        f"Espaço amostral: **{total_combinacoes:,} jogos de 6 números**."
     )
 
     jogos_aprovados = []
     testadas = 0
-    lote_update = max(200, min(80000, total_combinacoes // 40))
+    lote_update = max(1000, min(100000, total_combinacoes // 25))
 
     for comb in combinations(dezenas_candidatas, 6):
         testadas += 1
@@ -366,7 +367,7 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
     delta_final = max(0.001, time.time() - t_inicio)
     ticker_metricas.markdown(
         f"**Concluído:** `{testadas:,}` combinações testadas | "
-        f"Aprovados finais: `{len(jogos_aprovados):,}` apostas | "
+        f"Aprovados: `{len(jogos_aprovados):,}` apostas | "
         f"Tempo total: `{delta_final:.2f}s`"
     )
     return jogos_aprovados
@@ -381,7 +382,8 @@ def processar_arquivo_upload(conteudo_bytes):
     invalidos = 0
     for linha in linhas:
         l = linha.strip()
-        if not l: continue
+        if not l:
+            continue
         nums = [int(x) for x in re.findall(r"\b\d+\b", l)]
         nums_validos = sorted(list(set([n for n in nums if 1 <= n <= 60])))
         if len(nums_validos) == 6:
@@ -394,7 +396,6 @@ def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
     sorteio_set = set(dezenas_sorteadas)
     placar = {6: [], 5: [], 4: [], 3: [], 2: [], 1: [], 0: []}
     relatorio = []
-    
     for idx, jogo in enumerate(lista_jogos):
         acertos = sorted(list(set(jogo) & sorteio_set))
         qtd = len(acertos)
@@ -435,7 +436,7 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
             if n in jogo_set and n in sorteio_set:
                 celulas += f'<div style="width:34px;height:34px;background:#16a34a;color:#ffffff;font-weight:900;border:2px solid #0f5132;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}<span style="font-size:8px;line-height:6px;">★</span></div>'
             elif n in jogo_set:
-                celulas += f'<div style="width:34px;height:34px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:6px;display:align-items:center;justify-content:center;font-family:monospace;font-size:11px;display:flex;">{n:02d}</div>'
+                celulas += f'<div style="width:34px;height:34px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
             elif n in sorteio_set:
                 celulas += f'<div style="width:34px;height:34px;background:#fef08a;color:#854d0e;font-weight:800;border:2px dashed #ca8a04;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
             else:
@@ -473,10 +474,13 @@ if "jogos_upload" not in st.session_state:
 if "presets_filtros" not in st.session_state:
     st.session_state.presets_filtros = PRESETS_PADRAO.copy()
 
+if "input_resultado_reverso_val" not in st.session_state:
+    ult_res = st.session_state.historico[-1] if st.session_state.historico else [5, 9, 16, 40, 41, 59]
+    st.session_state.input_resultado_reverso_val = " ".join([f"{n:02d}" for n in ult_res])
+
 dados_calor = calcular_metricas_elliott(st.session_state.historico)
 ranking_elliott = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
 top_40_dezenas = {item["numero"] for item in ranking_elliott[:40]}
-
 pool_inicial = top_40_dezenas | DEZENAS_BASE_3010
 
 if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.pool_trabalho, set):
@@ -484,7 +488,8 @@ if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.po
 
 def aplicar_preset(nome_preset):
     cfg_p = st.session_state.presets_filtros.get(nome_preset)
-    if not cfg_p: return
+    if not cfg_p:
+        return
     for r in range(6):
         st.session_state[f"sel_l_{r}"] = cfg_p["linhas"][r]
     for c in range(10):
@@ -509,6 +514,12 @@ def toggle_dezena(n):
     else:
         st.session_state.pool_trabalho.add(n)
 
+def cb_puxar_ultimo():
+    if st.session_state.historico:
+        st.session_state.input_resultado_reverso_val = " ".join(
+            [f"{n:02d}" for n in st.session_state.historico[-1]]
+        )
+
 max_sc = max(d["score"] for d in dados_calor.values())
 min_sc = min(d["score"] for d in dados_calor.values())
 delta_sc = max(0.1, max_sc - min_sc)
@@ -521,14 +532,13 @@ def obter_estilo_calor(score):
         return {"cor_bg": "#ffedd5", "cor_texto": "#9a3412", "borda": "#f97316", "icone": "☀️"}
     elif norm >= 0.25:
         return {"cor_bg": "#fef9c3", "cor_texto": "#854d0e", "borda": "#eab308", "icone": "🌤️"}
-    else:
-        return {"cor_bg": "#f1f5f9", "cor_texto": "#475569", "borda": "#94a3b8", "icone": "❄️"}
+    return {"cor_bg": "#f1f5f9", "cor_texto": "#475569", "borda": "#94a3b8", "icone": "❄️"}
 
 # ==============================================================================
 # INTERFACE PRINCIPAL
 # ==============================================================================
 st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
-st.caption("Matriz 6x10 • Engenharia Reversa de Sorteios • Geração Inteligente de Filtros")
+st.caption("Matriz 6x10 • Engenharia Reversa (6 a 60 Dezenas) • Geração Inteligente de Filtros")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎟️ Cartela Térmica (Pool Ativo)",
@@ -543,11 +553,11 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 # ==============================================================================
 with tab_cartela:
     st.subheader("🎟️ Cartela de Calor Interativa (Matriz 6x10)")
-    st.markdown("Clique em qualquer número para adicionar ou remover do pool de apostas:")
+    st.markdown("Selecione os números que formarão a base do pool de combinações:")
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
-        if st.button("⭐ Carregar Pool 3010 + Top 40", use_container_width=True):
+        if st.button("⭐ Base 3010 + Top 40", use_container_width=True):
             st.session_state.pool_trabalho = (top_40_dezenas | DEZENAS_BASE_3010).copy()
             st.rerun()
     with c_b2:
@@ -576,23 +586,21 @@ with tab_cartela:
             meta = dados_calor[n]
             estilo = obter_estilo_calor(meta["score"])
             esta_ativa = n in st.session_state.pool_trabalho
-            
             tipo_btn = "primary" if esta_ativa else "secondary"
             check_ico = "🟢" if esta_ativa else "⚪"
             rotulo = f"{check_ico} {n:02d}\n{estilo['icone']}{meta['score']:.0f}p"
-            
+
             with cols[c]:
                 if st.button(rotulo, key=f"btn_num_{n}", type=tipo_btn, use_container_width=True):
                     toggle_dezena(n)
                     st.rerun()
 
     st.divider()
-
     col_inf1, col_inf2 = st.columns([3, 1])
     qtd_sel = len(st.session_state.pool_trabalho)
     with col_inf1:
         st.markdown(
-            "**Legenda de Calor:** &nbsp; "
+            "**Classificação Térmica:** &nbsp; "
             "<span style='color:#dc2626;font-weight:700;'>🔥 Ultra Quente (Onda 3)</span> &nbsp;|&nbsp; "
             "<span style='color:#ea580c;font-weight:700;'>☀️ Quente (Retração Fib)</span> &nbsp;|&nbsp; "
             "<span style='color:#ca8a04;font-weight:700;'>🌤️ Morno (Acumulação)</span> &nbsp;|&nbsp; "
@@ -612,22 +620,23 @@ with tab_cartela:
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
-    # --------------------------------------------------------------------------
-    # MÓDULO NOVO: ENGENHARIA REVERSA DIRETO DO RESULTADO
-    # --------------------------------------------------------------------------
+    # Módulo de Engenharia Reversa (de 6 até 60 dezenas)
     with st.container(border=True):
-        st.markdown("#### ⚡ Engenharia Reversa: Gerar e Gravar Filtro por Resultado")
-        st.caption("Digite as 6 dezenas sorteadas. O sistema disseca todas as linhas, colunas, diagonais e métricas, salvando e ativando o filtro instantaneamente.")
+        st.markdown("#### ⚡ Engenharia Reversa: Gerar Filtros a Partir de Dezenas (6 a 60 Números)")
+        st.caption(
+            "Cole de **6 até 60 dezenas** (resultados anteriores, quadrantes, fechamentos ou palpites). "
+            "O algoritmo dissecará a distribuição de linhas, colunas, diagonais, paridade, moldura e soma, "
+            "criando os filtros ideais e populando a sua cartela ativa."
+        )
 
         col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
-        
-        ult_res_padrao = " ".join([f"{n:02d}" for n in st.session_state.historico[-1]]) if st.session_state.historico else "05 09 16 40 41 59"
-        
         with col_input_res:
-            entrada_dezenas_filtro = st.text_input(
-                "6 Dezenas Sorteadas (espaço ou vírgula):",
-                value=ult_res_padrao,
-                key="input_resultado_reverso"
+            entrada_dezenas_filtro = st.text_area(
+                "Dezenas de Referência (de 6 a 60 números):",
+                value=st.session_state.input_resultado_reverso_val,
+                height=75,
+                key="input_resultado_reverso",
+                help="Separe os números por espaço, vírgula, traço ou quebra de linha."
             )
         with col_input_nome:
             nome_filtro_novo = st.text_input(
@@ -635,46 +644,54 @@ with tab_config:
                 value="MEU_NOVO_FILTRO",
                 key="input_nome_filtro_auto"
             )
+            substituir_pool_opcao = st.checkbox(
+                "Definir estas dezenas como Pool Ativo",
+                value=True,
+                help="Se marcado, a cartela de trabalho conterá exatamente estas dezenas."
+            )
         with col_input_tipo:
             tipo_tolerancia = st.selectbox(
                 "Nível de Tolerância:",
-                ["Perfil Exato (Cópia Fiel)", "Perfil Flexível (Duplas 0 a 2)"],
+                ["Perfil Exato (Fiel à Amostra)", "Perfil Flexível (Margem Aberta)"],
                 index=0,
                 key="select_modo_reverso"
             )
 
         c_btn_rev1, c_btn_rev2 = st.columns([2, 1])
         with c_btn_rev1:
-            if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Resultado", type="primary", use_container_width=True):
+            if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Conjunto", type="primary", use_container_width=True):
                 nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_dezenas_filtro)]
                 dezenas_limpas = sorted(list(set([n for n in nums_parse if 1 <= n <= 60])))
+                total_identificado = len(dezenas_limpas)
 
-                if len(dezenas_limpas) != 6:
-                    st.error("Por favor, informe exatamente 6 dezenas válidas (entre 01 e 60).")
+                if total_identificado < 6:
+                    st.error(f"Informe pelo menos 6 dezenas válidas (entre 01 e 60). Foram identificadas {total_identificado}.")
+                elif total_identificado > 60:
+                    st.error(f"O limite máximo é de 60 dezenas. Foram informadas {total_identificado}.")
                 elif not nome_filtro_novo.strip():
                     st.error("Informe um nome para o novo filtro.")
                 else:
                     modo_sel = "exato" if tipo_tolerancia.startswith("Perfil Exato") else "flexivel"
                     preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
                     nome_salvar = nome_filtro_novo.strip()
-                    
+
                     st.session_state.presets_filtros[nome_salvar] = preset_extraido
                     aplicar_preset(nome_salvar)
-                    
-                    # Garante que as dezenas analisadas entrem no pool de trabalho
-                    st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
-                    
-                    st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
+
+                    if substituir_pool_opcao:
+                        st.session_state.pool_trabalho = set(dezenas_limpas)
+                    else:
+                        st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
+
+                    st.success(
+                        f"🎉 Sucesso! Filtro '{nome_salvar}' gerado e ativado a partir de {total_identificado} dezenas! "
+                        f"As dezenas foram sincronizadas com o seu pool de apostas."
+                    )
                     st.rerun()
 
         with c_btn_rev2:
-            if st.button("🔄 Puxar Último Concurso", use_container_width=True):
-                st.session_state.input_resultado_reverso = " ".join([f"{n:02d}" for n in st.session_state.historico[-1]])
-                st.rerun()
+            st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
 
-    # --------------------------------------------------------------------------
-    # GERENCIADOR DE PREDEFINIÇÕES (SALVAR / CARREGAR / EXPORTAR / IMPORTAR)
-    # --------------------------------------------------------------------------
     with st.container(border=True):
         st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
         col_puxar, col_gravar = st.columns(2)
@@ -683,12 +700,12 @@ with tab_config:
             st.markdown("**📥 Carregar Filtro Salvo:**")
             lista_nomes = list(st.session_state.presets_filtros.keys())
             filtro_escolhido = st.selectbox("Selecione o filtro:", lista_nomes, index=0, key="select_preset_load")
-            
+
             c_pux1, c_pux2 = st.columns(2)
             with c_pux1:
                 if st.button("🚀 Aplicar Predefinição", use_container_width=True):
                     aplicar_preset(filtro_escolhido)
-                    st.success(f"Filtro '{filtro_escolhido}' carregado com sucesso!")
+                    st.success(f"Filtro '{filtro_escolhido}' carregado!")
                     st.rerun()
             with c_pux2:
                 json_presets = json.dumps(st.session_state.presets_filtros, indent=2, ensure_ascii=False)
@@ -702,8 +719,8 @@ with tab_config:
 
         with col_gravar:
             st.markdown("**💾 Gravar Configuração Manual Atual:**")
-            nome_novo_filtro = st.text_input("Nome da predefinição manual:", placeholder="Ex: Meu Filtro Estrutural", key="input_nome_filtro_manual")
-            
+            nome_novo_filtro = st.text_input("Nome da predefinição manual:", placeholder="Ex: Filtro Personalizado", key="input_nome_filtro_manual")
+
             c_grv1, c_grv2 = st.columns(2)
             with c_grv1:
                 if st.button("💾 Gravar Manual", use_container_width=True):
@@ -734,10 +751,8 @@ with tab_config:
                         st.error(f"Erro ao ler JSON: {e}")
 
     st.divider()
-
     opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
 
-    # Linhas
     with st.container(border=True):
         st.markdown("#### 1️⃣ Linhas Individuais (L01 a L06)")
         cols_l = st.columns(6)
@@ -749,7 +764,6 @@ with tab_config:
                 esc = st.selectbox(f"Linha {r+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_l_{r}")
                 limites_linhas.append(OPCOES_QUANTIDADE[esc])
 
-    # Colunas
     with st.container(border=True):
         st.markdown("#### 2️⃣ Colunas Individuais (C01 a C10)")
         cols_c_up, cols_c_dw = st.columns(5), st.columns(5)
@@ -762,7 +776,6 @@ with tab_config:
                 esc = st.selectbox(f"Coluna {c+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_c_{c}")
                 limites_colunas.append(OPCOES_QUANTIDADE[esc])
 
-    # Diagonais
     c_diag1, c_diag2 = st.columns(2)
     with c_diag1:
         with st.container(border=True):
@@ -785,7 +798,6 @@ with tab_config:
                     esc = st.selectbox(f"DD{d+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_dd_{d}")
                     limites_dd.append(OPCOES_QUANTIDADE[esc])
 
-    # Primos, Pares, Moldura e Faixa de Soma
     with st.container(border=True):
         st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
@@ -812,7 +824,6 @@ with tab_config:
     }
 
     st.divider()
-
     c_exec1, c_exec2 = st.columns([3, 1])
     with c_exec2:
         teto_apostas = st.number_input("Teto Máximo de Jogos:", min_value=1, max_value=50000, value=500, step=50)
@@ -849,16 +860,16 @@ with tab_config:
                     )
                 else:
                     status_box.update(
-                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu a todos os critérios.",
+                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu aos filtros selecionados.",
                         state="error",
                         expanded=True
                     )
 
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais de 6 dezenas prontas!")
+        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais prontas.")
         txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
-        
+
         c_d1, c_d2 = st.columns([3, 1])
         with c_d1:
             st.download_button(
@@ -893,7 +904,7 @@ with tab_volante:
                     else:
                         bg = "#f1f5f9" if n in MOLDURA_SET else "#ffffff"
                         celulas += f'<div style="width:34px;height:34px;background:{bg};color:#64748b;border:1px solid #cbd5e1;font-weight:600;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;">{n:02d}</div>'
-            
+
             html_cartela = f"""
             <!DOCTYPE html><html><head><meta charset="utf-8">
             <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
@@ -916,14 +927,14 @@ with tab_volante:
                 st.markdown("**Colunas:** " + " • ".join([f"C{k:02d}: `{v}x`" for k, v in sorted(cnt_colunas.items())]))
                 st.markdown("**Diagonais Cresc.:** " + " • ".join([f"DC{k:02d}: `{v}x`" for k, v in sorted(cnt_dc.items())]))
                 st.markdown("**Diagonais Decresc.:** " + " • ".join([f"DD{k:02d}: `{v}x`" for k, v in sorted(cnt_dd.items())]))
-                
+
                 pr = sum(1 for n in jogo_ativo if PROPS[n]["is_primo"])
                 pa = sum(1 for n in jogo_ativo if PROPS[n]["is_par"])
                 mo = sum(1 for n in jogo_ativo if PROPS[n]["is_moldura"])
                 st.divider()
                 st.markdown(f"**Pares/Ímpares:** `{pa}P / {6-pa}I` | **Primos:** `{pr}` | **Moldura:** `{mo}` | **Soma:** `{sum(jogo_ativo)}`")
     else:
-        st.info("Gere apostas para visualizá-las no volante oficial.")
+        st.info("Gere apostas na aba de Filtros para visualizá-las no volante oficial.")
 
 # ==============================================================================
 # ABA 4: UPLOAD & CONFERÊNCIA
@@ -1043,29 +1054,36 @@ with tab_upload:
 with tab_historico:
     st.subheader("Base de Sorteios Oficiais")
     st.write(f"Concursos ativos em memória: **{len(st.session_state.historico)}** ({st.session_state.origem})")
-    
+
     if st.button("🌐 Sincronizar Histórico com a Caixa Agora", type="primary"):
         with st.spinner("Conectando aos servidores da Caixa..."):
             try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Referer": "https://loterias.caixa.gov.br/"
+                }
                 r = requests.get(
                     "https://servicebus2.caixa.gov.br/portaldeloterias/api/megasena",
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-                    timeout=7
+                    headers=headers,
+                    timeout=10,
+                    verify=False
                 )
                 if r.status_code == 200:
                     ult = r.json()
                     dezenas_sorteadas = sorted([int(x) for x in ult.get("listaDezenas", [])])
-                    
+
                     if len(dezenas_sorteadas) == 6:
                         if dezenas_sorteadas not in st.session_state.historico:
                             st.session_state.historico.append(dezenas_sorteadas)
                         st.session_state.origem = f"API Caixa (Concurso #{ult.get('numero', '?')})"
+                        st.session_state.input_resultado_reverso_val = " ".join([f"{n:02d}" for n in dezenas_sorteadas])
                         st.success(f"Concurso #{ult.get('numero')} sincronizado: {' - '.join([f'{n:02d}' for n in dezenas_sorteadas])}")
                         st.rerun()
                     else:
-                        st.warning("Formato inesperado retornado pela API da Caixa.")
+                        st.warning("Formato inesperado no retorno da API da Caixa.")
                 else:
-                    st.warning(f"Servidor da Caixa retornou status {r.status_code}.")
+                    st.warning(f"Servidor da Caixa retornou código HTTP {r.status_code}.")
             except Exception as e:
                 st.error(f"Erro ao conectar com a API: {e}")
 
