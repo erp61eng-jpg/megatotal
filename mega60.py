@@ -113,13 +113,29 @@ PRESETS_PADRAO = {
 }
 
 # ==============================================================================
-# ENGENHARIA REVERSA ESCALÁVEL (6 ATÉ 60 DEZENAS)
+# ENGENHARIA REVERSA: EXTRAÇÃO INDIVIDUAL E MULTICONCURSOS
 # ==============================================================================
 def mapear_quantidade_para_rotulo(qtd, modo="exato"):
     if modo == "exato":
         mapa = {0: "0 (Nenhuma)", 1: "Exatamente 1", 2: "Exatamente 2", 3: "Exatamente 3", 4: "Exatamente 4"}
         return mapa.get(qtd, "Livre (0 a 6)")
     return "0 a 2" if qtd <= 2 else "Livre (0 a 6)"
+
+def mapear_intervalo_para_opcao(min_v, max_v, flexivel=False):
+    if flexivel:
+        min_v = max(0, min_v - 1)
+        max_v = min(6, max_v + 1)
+    for label, (low, high) in OPCOES_QUANTIDADE.items():
+        if low == min_v and high == max_v:
+            return label
+    candidatos = []
+    for label, (low, high) in OPCOES_QUANTIDADE.items():
+        if low <= min_v and high >= max_v:
+            candidatos.append((high - low, label))
+    if candidatos:
+        candidatos.sort(key=lambda x: x[0])
+        return candidatos[0][1]
+    return "Livre (0 a 6)"
 
 def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
     dezenas = sorted(list(set(dezenas)))
@@ -169,14 +185,10 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
             }
 
     def converter_contagem_grupo(qtd):
-        if qtd == 0:
-            return "0 (Nenhuma)"
-        elif qtd == 1:
-            return "0 ou 1"
-        elif qtd <= 3:
-            return "0 a 2"
-        elif qtd <= 5:
-            return "1 a 3"
+        if qtd == 0: return "0 (Nenhuma)"
+        elif qtd == 1: return "0 ou 1"
+        elif qtd <= 3: return "0 a 2"
+        elif qtd <= 5: return "1 a 3"
         return "Livre (0 a 6)"
 
     linhas_filt = [converter_contagem_grupo(q) for q in l_cnt]
@@ -186,13 +198,10 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
 
     prop_primo = primos_total / total_dezenas
     esperado_primo = int(round(prop_primo * 6))
-    primos_range = sorted(list({max(0, esperado_primo - 1), esperado_primo, min(6, esperado_primo + 1)}))
-    if not primos_range:
-        primos_range = [1, 2, 3]
+    primos_range = sorted(list({max(0, esperado_primo - 1), esperado_primo, min(6, esperado_primo + 1)})) or [1, 2, 3]
 
     prop_par = pares_total / total_dezenas
-    esperado_par = int(round(prop_par * 6))
-    esperado_par = max(1, min(5, esperado_par))
+    esperado_par = max(1, min(5, int(round(prop_par * 6))))
     pares_opcoes = list({f"{esperado_par}P / {6 - esperado_par}I", "3P / 3I", "4P / 2I", "2P / 4I"})
 
     prop_moldura = moldura_total / total_dezenas
@@ -213,6 +222,103 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
         "pares": pares_opcoes,
         "moldura": moldura_range,
         "soma": faixa_soma
+    }
+
+def extrair_filtros_multiconcursos(lista_sorteios, modo="preciso"):
+    if not lista_sorteios:
+        return None
+
+    is_flex = modo == "flexivel"
+    k_sorteios = len(lista_sorteios)
+
+    min_l, max_l = [99] * 6, [-1] * 6
+    min_c, max_c = [99] * 10, [-1] * 10
+    min_dc, max_dc = [99] * 10, [-1] * 10
+    min_dd, max_dd = [99] * 10, [-1] * 10
+
+    conjunto_primos = set()
+    conjunto_pares = set()
+    conjunto_moldura = set()
+    somas_observadas = []
+
+    for sorteio in lista_sorteios:
+        dezenas = sorted(sorteio)
+        l_cnt, c_cnt = [0] * 6, [0] * 10
+        dc_cnt, dd_cnt = [0] * 10, [0] * 10
+
+        for n in dezenas:
+            l_cnt[ROW_LOOKUP[n]] += 1
+            c_cnt[COL_LOOKUP[n]] += 1
+            dc_cnt[DC_LOOKUP[n]] += 1
+            dd_cnt[DD_LOOKUP[n]] += 1
+
+        for r in range(6):
+            min_l[r] = min(min_l[r], l_cnt[r])
+            max_l[r] = max(max_l[r], l_cnt[r])
+
+        for c in range(10):
+            min_c[c] = min(min_c[c], c_cnt[c])
+            max_c[c] = max(max_c[c], c_cnt[c])
+
+        for d in range(10):
+            min_dc[d] = min(min_dc[d], dc_cnt[d])
+            max_dc[d] = max(max_dc[d], dc_cnt[d])
+            min_dd[d] = min(min_dd[d], dd_cnt[d])
+            max_dd[d] = max(max_dd[d], dd_cnt[d])
+
+        pr = sum(1 for n in dezenas if PRIMO_LOOKUP[n])
+        pa = sum(1 for n in dezenas if PAR_LOOKUP[n])
+        mo = sum(1 for n in dezenas if MOLDURA_LOOKUP[n])
+        so = sum(dezenas)
+
+        conjunto_primos.add(pr)
+        conjunto_pares.add(f"{pa}P / {6 - pa}I")
+        conjunto_moldura.add(mo)
+        somas_observadas.append(so)
+
+    linhas_filt = [mapear_intervalo_para_opcao(min_l[r], max_l[r], flexivel=is_flex) for r in range(6)]
+    colunas_filt = [mapear_intervalo_para_opcao(min_c[c], max_c[c], flexivel=is_flex) for c in range(10)]
+    dc_filt = [mapear_intervalo_para_opcao(min_dc[d], max_dc[d], flexivel=is_flex) for d in range(10)]
+    dd_filt = [mapear_intervalo_para_opcao(min_dd[d], max_dd[d], flexivel=is_flex) for d in range(10)]
+
+    primos_res = sorted(list(conjunto_primos))
+    moldura_res = sorted(list(conjunto_moldura))
+    pares_res = sorted(list(conjunto_pares))
+
+    if is_flex:
+        ext_pr = set(primos_res)
+        for p in primos_res:
+            ext_pr.add(max(0, p - 1))
+            ext_pr.add(min(6, p + 1))
+        primos_res = sorted(list(ext_pr))
+
+        ext_mo = set(moldura_res)
+        for m in moldura_res:
+            ext_mo.add(max(0, m - 1))
+            ext_mo.add(min(6, m + 1))
+        moldura_res = sorted(list(ext_mo))
+
+    margem_soma = 20 if not is_flex else 35
+    soma_min = max(50, min(somas_observadas) - margem_soma)
+    soma_max = min(320, max(somas_observadas) + margem_soma)
+
+    return {
+        "linhas": linhas_filt,
+        "colunas": colunas_filt,
+        "diag_cresc": dc_filt,
+        "diag_decresc": dd_filt,
+        "primos": primos_res,
+        "pares": pares_res,
+        "moldura": moldura_res,
+        "soma": (soma_min, soma_max),
+        "audit": {
+            "total_concursos": k_sorteios,
+            "soma_min_real": min(somas_observadas),
+            "soma_max_real": max(somas_observadas),
+            "primos_reais": sorted(list(conjunto_primos)),
+            "pares_reais": sorted(list(conjunto_pares)),
+            "moldura_reais": sorted(list(conjunto_moldura))
+        }
     }
 
 # ==============================================================================
@@ -380,8 +486,7 @@ def processar_arquivo_upload(conteudo_bytes):
     invalidos = 0
     for linha in linhas:
         l = linha.strip()
-        if not l:
-            continue
+        if not l: continue
         nums = [int(x) for x in re.findall(r"\b\d+\b", l)]
         nums_validos = sorted(list(set([n for n in nums if 1 <= n <= 60])))
         if len(nums_validos) == 6:
@@ -489,8 +594,7 @@ if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.po
 
 def aplicar_preset(nome_preset):
     cfg_p = st.session_state.presets_filtros.get(nome_preset)
-    if not cfg_p:
-        return
+    if not cfg_p: return
     for r in range(6):
         st.session_state[f"sel_l_{r}"] = cfg_p["linhas"][r]
     for c in range(10):
@@ -539,7 +643,7 @@ def obter_estilo_calor(score):
 # INTERFACE PRINCIPAL
 # ==============================================================================
 st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
-st.caption("Matriz 6x10 • Engenharia Reversa (6 a 60 Dezenas) • Geração Inteligente de Filtros")
+st.caption("Matriz 6x10 • Engenharia Reversa Multiconcursos • Monitor da Linha de Trabalho")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎟️ Cartela Térmica (Pool Ativo)",
@@ -621,131 +725,228 @@ with tab_cartela:
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
-    # Módulo de Engenharia Reversa (6 a 60 dezenas) com Linha de Trabalho
-    with st.container(border=True):
-        st.markdown("#### ⚡ Engenharia Reversa: Gerar Filtros a Partir de Dezenas (6 a 60 Números)")
-        st.caption(
-            "Cole de **6 até 60 dezenas** (resultados anteriores, quadrantes, fechamentos ou palpites). "
-            "O algoritmo dissecará a distribuição de linhas, colunas, diagonais, paridade, moldura e soma, "
-            "criando os filtros ideais e populando a sua cartela ativa."
-        )
+    # SUB-ABA / SEÇÃO: DUAS ROTINAS REVERSAS (CONCURSOS HISTÓRICOS VS DEZENAS DIGITADAS)
+    tipo_reverso = st.radio(
+        "Selecione a Rotina de Engenharia Reversa Desejada:",
+        [
+            "🏛️ Rotina 1: Histórica Multiconcursos (Concursos Anteriores em Lote)",
+            "⚡ Rotina 2: Amostra Personalizada (Digitar 6 a 60 Dezenas)"
+        ],
+        horizontal=True
+    )
 
-        col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
-        with col_input_res:
-            entrada_dezenas_filtro = st.text_area(
-                "Dezenas de Referência (de 6 a 60 números):",
-                value=st.session_state.input_resultado_reverso_val,
-                height=75,
-                key="input_resultado_reverso",
-                help="Separe os números por espaço, vírgula, traço ou quebra de linha."
-            )
-        with col_input_nome:
-            nome_filtro_novo = st.text_input(
-                "Nome para Salvar o Filtro:",
-                value="MEU_NOVO_FILTRO",
-                key="input_nome_filtro_auto"
-            )
-            substituir_pool_opcao = st.checkbox(
-                "Definir estas dezenas como Pool Ativo",
-                value=True,
-                help="Se marcado, a cartela de trabalho conterá exatamente estas dezenas."
-            )
-        with col_input_tipo:
-            tipo_tolerancia = st.selectbox(
-                "Nível de Tolerância:",
-                ["Perfil Exato (Fiel à Amostra)", "Perfil Flexível (Margem Aberta)"],
-                index=0,
-                key="select_modo_reverso"
+    # --------------------------------------------------------------------------
+    # ROTINA 1: HISTÓRICA MULTICONCURSOS
+    # --------------------------------------------------------------------------
+    if tipo_reverso.startswith("🏛️ Rotina 1"):
+        with st.container(border=True):
+            st.markdown("#### 🏛️ Engenharia Reversa Multiconcursos: Otimização Histórica")
+            st.caption(
+                "Escolha a quantidade de concursos anteriores recentes para sintetizar o **Melhor Filtro Combinado**. "
+                "O motor analisa linha por linha, coluna por coluna, diagonais, somas e paridades de todos esses resultados, "
+                "criando a moldura matemática precisa que cobriu 100% desses concursos."
             )
 
-        c_btn_rev1, c_btn_rev2 = st.columns([2, 1])
-        with c_btn_rev1:
-            if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Conjunto", type="primary", use_container_width=True):
-                nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_dezenas_filtro)]
-                dezenas_limpas = sorted(list(set([n for n in nums_parse if 1 <= n <= 60])))
-                total_identificado = len(dezenas_limpas)
+            total_disp = len(st.session_state.historico)
+            col_m1, col_m2, col_m3 = st.columns([1.5, 1.8, 1.7])
+            with col_m1:
+                qtd_concursos_sel = st.slider(
+                    "Concursos Anteriores para Analisar:",
+                    min_value=1,
+                    max_value=max(1, total_disp),
+                    value=min(10, total_disp),
+                    help=f"Total disponível em memória: {total_disp} sorteios."
+                )
+            with col_m2:
+                nome_filtro_multi = st.text_input(
+                    "Nome da Predefinição:",
+                    value=f"FILTRO_ULT_{qtd_concursos_sel}_CONCURSOS",
+                    key="input_nome_multi"
+                )
+                carregar_pool_multi = st.checkbox(
+                    "Carregar Dezenas Desses Sorteios no Pool",
+                    value=True,
+                    help="Adiciona na cartela todas as dezenas que foram sorteadas nesse período."
+                )
+            with col_m3:
+                tolerancia_multi = st.selectbox(
+                    "Margem Estrutural:",
+                    ["Envelope Preciso (100% dos Sorteios)", "Envelope Flexível (Margem +1 / -1)"],
+                    index=0,
+                    key="sel_tolerancia_multi"
+                )
 
-                if total_identificado < 6:
-                    st.error(f"Informe pelo menos 6 dezenas válidas (entre 01 e 60). Foram identificadas {total_identificado}.")
-                elif total_identificado > 60:
-                    st.error(f"O limite máximo é de 60 dezenas. Foram informadas {total_identificado}.")
-                elif not nome_filtro_novo.strip():
-                    st.error("Informe um nome para o novo filtro.")
-                else:
-                    modo_sel = "exato" if tipo_tolerancia.startswith("Perfil Exato") else "flexivel"
-                    preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
-                    nome_salvar = nome_filtro_novo.strip()
-
-                    # 1. Grava no catálogo de predefinições
-                    st.session_state.presets_filtros[nome_salvar] = preset_extraido
+            if st.button("🚀 Processar Concursos, Criar e Ativar Melhor Filtro", type="primary", use_container_width=True):
+                with st.spinner("Varrendo e modelando concursos selecionados..."):
+                    sorteios_alvo = st.session_state.historico[-qtd_concursos_sel:]
+                    modo_extrair = "preciso" if tolerancia_multi.startswith("Envelope Preciso") else "flexivel"
+                    preset_multi = extrair_filtros_multiconcursos(sorteios_alvo, modo=modo_extrair)
                     
-                    # 2. Ativa o filtro imediatamente nos controles da interface
+                    nome_salvar = nome_filtro_multi.strip() or f"FILTRO_ULT_{qtd_concursos_sel}_CONCURSOS"
+                    audit_dados = preset_multi.pop("audit")
+                    
+                    st.session_state.presets_filtros[nome_salvar] = preset_multi
                     aplicar_preset(nome_salvar)
 
-                    # 3. Atualiza pool na cartela
-                    if substituir_pool_opcao:
-                        st.session_state.pool_trabalho = set(dezenas_limpas)
-                    else:
-                        st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
+                    dezenas_unicas_periodo = sorted(list({n for j in sorteios_alvo for n in j}))
 
-                    # 4. Registra auditoria na Linha de Trabalho
+                    if carregar_pool_multi:
+                        st.session_state.pool_trabalho = set(dezenas_unicas_periodo)
+                    else:
+                        st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_unicas_periodo)
+
                     hora_agora = time.strftime("%H:%M:%S - %d/%m/%Y")
                     st.session_state.linha_trabalho_reverso = {
+                        "tipo": "MULTICONCURSOS",
                         "nome": nome_salvar,
-                        "qtd_dezenas": total_identificado,
-                        "dezenas": dezenas_limpas,
+                        "qtd_concursos": qtd_concursos_sel,
+                        "total_dezenas_unicas": len(dezenas_unicas_periodo),
+                        "dezenas": dezenas_unicas_periodo,
                         "timestamp": hora_agora,
-                        "status": "PROCESSADO & GRAVADO COM SUCESSO",
-                        "modo": tipo_tolerancia,
-                        "pool_atualizado": substituir_pool_opcao
+                        "status": "CONCLUÍDO & ATIVO NO MOTOR",
+                        "modo": tolerancia_multi,
+                        "audit": audit_dados,
+                        "pool_atualizado": carregar_pool_multi
                     }
 
-                    st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
+                    st.success(f"🎉 Sucesso! O melhor filtro para os últimos {qtd_concursos_sel} concursos foi sintetizado e ativado!")
                     st.rerun()
 
-        with c_btn_rev2:
-            st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
+    # --------------------------------------------------------------------------
+    # ROTINA 2: AMOSTRA PERSONALIZADA (6 A 60 DEZENAS)
+    # --------------------------------------------------------------------------
+    else:
+        with st.container(border=True):
+            st.markdown("#### ⚡ Engenharia Reversa por Dezenas Digitadas (6 a 60 Números)")
+            st.caption("Cole de 6 a 60 dezenas avulsas. O motor sintetiza a distribuição ideal e envia direto ao painel.")
 
-        # ----------------------------------------------------------------------
-        # LINHA DE TRABALHO: MONITOR DE PROCESSAMENTO E GRAVAÇÃO
-        # ----------------------------------------------------------------------
-        st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
-        if st.session_state.linha_trabalho_reverso:
-            lt = st.session_state.linha_trabalho_reverso
-            dezenas_formatadas = " - ".join([f"{n:02d}" for n in lt["dezenas"]])
-            pool_info = "Cartela sobrescrita com estas dezenas" if lt["pool_atualizado"] else "Dezenas mescladas à cartela ativa"
-            
-            st.markdown(
-                f"""
-                <div style="background:#f0fdf4;border:1px solid #86efac;border-left:6px solid #16a34a;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                        <span style="font-weight:900;color:#15803d;font-size:13px;letter-spacing:0.5px;">
-                            🟢 LINHA DE TRABALHO: {lt['status']}
-                        </span>
-                        <span style="font-size:11px;color:#166534;font-family:monospace;background:#dcfce7;border:1px solid #bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700;">
-                            🕒 {lt['timestamp']}
-                        </span>
-                    </div>
-                    <div style="margin-top:8px;font-size:12px;color:#14532d;line-height:1.6;">
-                        • <strong>Filtro em Operação:</strong> <code style="color:#0f5132;background:#dcfce7;padding:1px 6px;border-radius:3px;font-weight:bold;">{lt['nome']}</code> ({lt['modo']})<br>
-                        • <strong>Volume Analisado:</strong> <strong>{lt['qtd_dezenas']} dezenas</strong> computadas nas linhas, colunas, diagonais, paridade e moldura.<br>
-                        • <strong>Dezenas Auditadas:</strong> <span style="font-family:monospace;color:#166534;font-weight:700;">{dezenas_formatadas}</span><br>
-                        • <strong>Sincronização:</strong> Gravado na lista de predefinições manuais e ativo no motor combinatório ({pool_info}).
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
+            col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
+            with col_input_res:
+                entrada_dezenas_filtro = st.text_area(
+                    "Dezenas de Referência (6 a 60 números):",
+                    value=st.session_state.input_resultado_reverso_val,
+                    height=75,
+                    key="input_resultado_reverso"
+                )
+            with col_input_nome:
+                nome_filtro_novo = st.text_input(
+                    "Nome para Salvar o Filtro:",
+                    value="MEU_NOVO_FILTRO",
+                    key="input_nome_filtro_auto"
+                )
+                substituir_pool_opcao = st.checkbox(
+                    "Definir estas dezenas como Pool Ativo",
+                    value=True
+                )
+            with col_input_tipo:
+                tipo_tolerancia = st.selectbox(
+                    "Nível de Tolerância:",
+                    ["Perfil Exato (Fiel à Amostra)", "Perfil Flexível (Margem Aberta)"],
+                    index=0,
+                    key="select_modo_reverso"
+                )
+
+            c_btn_rev1, c_btn_rev2 = st.columns([2, 1])
+            with c_btn_rev1:
+                if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Conjunto", type="primary", use_container_width=True):
+                    nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_dezenas_filtro)]
+                    dezenas_limpas = sorted(list(set([n for n in nums_parse if 1 <= n <= 60])))
+                    total_identificado = len(dezenas_limpas)
+
+                    if total_identificado < 6:
+                        st.error(f"Informe pelo menos 6 dezenas válidas (entre 01 e 60). Foram identificadas {total_identificado}.")
+                    elif total_identificado > 60:
+                        st.error(f"O limite máximo é de 60 dezenas. Foram informadas {total_identificado}.")
+                    elif not nome_filtro_novo.strip():
+                        st.error("Informe um nome para o novo filtro.")
+                    else:
+                        modo_sel = "exato" if tipo_tolerancia.startswith("Perfil Exato") else "flexivel"
+                        preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
+                        nome_salvar = nome_filtro_novo.strip()
+
+                        st.session_state.presets_filtros[nome_salvar] = preset_extraido
+                        aplicar_preset(nome_salvar)
+
+                        if substituir_pool_opcao:
+                            st.session_state.pool_trabalho = set(dezenas_limpas)
+                        else:
+                            st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
+
+                        hora_agora = time.strftime("%H:%M:%S - %d/%m/%Y")
+                        st.session_state.linha_trabalho_reverso = {
+                            "tipo": "AMOSTRA_DEZENAS",
+                            "nome": nome_salvar,
+                            "qtd_dezenas": total_identificado,
+                            "dezenas": dezenas_limpas,
+                            "timestamp": hora_agora,
+                            "status": "PROCESSADO & GRAVADO COM SUCESSO",
+                            "modo": tipo_tolerancia,
+                            "pool_atualizado": substituir_pool_opcao
+                        }
+
+                        st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
+                        st.rerun()
+
+            with c_btn_rev2:
+                st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
+
+    # --------------------------------------------------------------------------
+    # LINHA DE TRABALHO & SINAL DE OPERAÇÃO (EXIBE STATUS DE AMBAS AS ROTINAS)
+    # --------------------------------------------------------------------------
+    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+    if st.session_state.linha_trabalho_reverso:
+        lt = st.session_state.linha_trabalho_reverso
+        is_multi = lt.get("tipo") == "MULTICONCURSOS"
+        dezenas_formatadas = " - ".join([f"{n:02d}" for n in lt["dezenas"]])
+        pool_info = "Cartela sincronizada com este pool" if lt["pool_atualizado"] else "Cartela prévia preservada"
+
+        if is_multi:
+            detalhes_audit = (
+                f"• <strong>Base de Auditoria:</strong> <strong>{lt['qtd_concursos']} concursos recentes</strong> analisados.<br>"
+                f"• <strong>Dezenas Abrangidas no Histórico ({lt['total_dezenas_unicas']}):</strong> <span style='font-family:monospace;color:#166534;font-weight:700;'>{dezenas_formatadas}</span><br>"
+                f"• <strong>Faixa de Soma Observada:</strong> <code>{lt['audit']['soma_min_real']}</code> até <code>{lt['audit']['soma_max_real']}</code> | "
+                f"<strong>Primos Reais:</strong> <code>{lt['audit']['primos_reais']}</code> | "
+                f"<strong>Moldura Real:</strong> <code>{lt['audit']['moldura_reais']}</code>"
             )
         else:
-            st.markdown(
-                """
-                <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-left:6px solid #94a3b8;border-radius:8px;padding:10px 14px;color:#64748b;font-size:12px;">
-                    ⚪ <strong>LINHA DE TRABALHO (OCIOSA):</strong> Nenhuma extração executada nesta sessão. Digite as dezenas acima e clique em <em>'Gerar, Gravar e Ativar Filtro Deste Conjunto'</em> para processar e gravar.
-                </div>
-                """,
-                unsafe_allow_html=True
+            detalhes_audit = (
+                f"• <strong>Volume Analisado:</strong> <strong>{lt['qtd_dezenas']} dezenas</strong> computadas em linhas, colunas e diagonais.<br>"
+                f"• <strong>Dezenas Auditadas:</strong> <span style='font-family:monospace;color:#166534;font-weight:700;'>{dezenas_formatadas}</span>"
             )
 
+        st.markdown(
+            f"""
+            <div style="background:#f0fdf4;border:1px solid #86efac;border-left:6px solid #16a34a;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:15px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <span style="font-weight:900;color:#15803d;font-size:13px;letter-spacing:0.5px;">
+                        🟢 LINHA DE TRABALHO: {lt['status']} ({lt.get('tipo', 'OPERACIONAL')})
+                    </span>
+                    <span style="font-size:11px;color:#166534;font-family:monospace;background:#dcfce7;border:1px solid #bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700;">
+                        🕒 {lt['timestamp']}
+                    </span>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:#14532d;line-height:1.6;">
+                    • <strong>Filtro Ativo:</strong> <code style="color:#0f5132;background:#dcfce7;padding:1px 6px;border-radius:3px;font-weight:bold;">{lt['nome']}</code> ({lt['modo']})<br>
+                    {detalhes_audit}<br>
+                    • <strong>Sincronização:</strong> Gravado no catálogo de predefinições e aplicado aos seletores abaixo ({pool_info}).
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            """
+            <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-left:6px solid #94a3b8;border-radius:8px;padding:10px 14px;color:#64748b;font-size:12px;margin-bottom:15px;">
+                ⚪ <strong>LINHA DE TRABALHO (AGUARDANDO):</strong> Nenhuma rotina executada. Escolha uma das opções acima e clique em processar para gerar e visualizar os dados em tempo real.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # --------------------------------------------------------------------------
+    # GERENCIADOR DE PREDEFINIÇÕES (CARREGAR / SALVAR / BAIXAR)
+    # --------------------------------------------------------------------------
     with st.container(border=True):
         st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
         col_puxar, col_gravar = st.columns(2)
