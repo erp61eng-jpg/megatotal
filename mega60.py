@@ -141,7 +141,6 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
     moldura_total = sum(1 for n in dezenas if MOLDURA_LOOKUP[n])
     soma_total = sum(dezenas)
 
-    # Caso 1: Exatamente 6 dezenas (resultado direto de concurso)
     if total_dezenas == 6:
         if modo == "exato":
             return {
@@ -169,7 +168,6 @@ def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=25):
                 "soma": (max(50, soma_total - 30), min(320, soma_total + 30))
             }
 
-    # Caso 2: Grupo ampliado (7 a 60 dezenas)
     def converter_contagem_grupo(qtd):
         if qtd == 0:
             return "0 (Nenhuma)"
@@ -478,6 +476,9 @@ if "input_resultado_reverso_val" not in st.session_state:
     ult_res = st.session_state.historico[-1] if st.session_state.historico else [5, 9, 16, 40, 41, 59]
     st.session_state.input_resultado_reverso_val = " ".join([f"{n:02d}" for n in ult_res])
 
+if "linha_trabalho_reverso" not in st.session_state:
+    st.session_state.linha_trabalho_reverso = None
+
 dados_calor = calcular_metricas_elliott(st.session_state.historico)
 ranking_elliott = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
 top_40_dezenas = {item["numero"] for item in ranking_elliott[:40]}
@@ -620,7 +621,7 @@ with tab_cartela:
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
-    # Módulo de Engenharia Reversa (de 6 até 60 dezenas)
+    # Módulo de Engenharia Reversa (6 a 60 dezenas) com Linha de Trabalho
     with st.container(border=True):
         st.markdown("#### ⚡ Engenharia Reversa: Gerar Filtros a Partir de Dezenas (6 a 60 Números)")
         st.caption(
@@ -675,22 +676,75 @@ with tab_config:
                     preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
                     nome_salvar = nome_filtro_novo.strip()
 
+                    # 1. Grava no catálogo de predefinições
                     st.session_state.presets_filtros[nome_salvar] = preset_extraido
+                    
+                    # 2. Ativa o filtro imediatamente nos controles da interface
                     aplicar_preset(nome_salvar)
 
+                    # 3. Atualiza pool na cartela
                     if substituir_pool_opcao:
                         st.session_state.pool_trabalho = set(dezenas_limpas)
                     else:
                         st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
 
-                    st.success(
-                        f"🎉 Sucesso! Filtro '{nome_salvar}' gerado e ativado a partir de {total_identificado} dezenas! "
-                        f"As dezenas foram sincronizadas com o seu pool de apostas."
-                    )
+                    # 4. Registra auditoria na Linha de Trabalho
+                    hora_agora = time.strftime("%H:%M:%S - %d/%m/%Y")
+                    st.session_state.linha_trabalho_reverso = {
+                        "nome": nome_salvar,
+                        "qtd_dezenas": total_identificado,
+                        "dezenas": dezenas_limpas,
+                        "timestamp": hora_agora,
+                        "status": "PROCESSADO & GRAVADO COM SUCESSO",
+                        "modo": tipo_tolerancia,
+                        "pool_atualizado": substituir_pool_opcao
+                    }
+
+                    st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
                     st.rerun()
 
         with c_btn_rev2:
             st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
+
+        # ----------------------------------------------------------------------
+        # LINHA DE TRABALHO: MONITOR DE PROCESSAMENTO E GRAVAÇÃO
+        # ----------------------------------------------------------------------
+        st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+        if st.session_state.linha_trabalho_reverso:
+            lt = st.session_state.linha_trabalho_reverso
+            dezenas_formatadas = " - ".join([f"{n:02d}" for n in lt["dezenas"]])
+            pool_info = "Cartela sobrescrita com estas dezenas" if lt["pool_atualizado"] else "Dezenas mescladas à cartela ativa"
+            
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-left:6px solid #16a34a;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <span style="font-weight:900;color:#15803d;font-size:13px;letter-spacing:0.5px;">
+                            🟢 LINHA DE TRABALHO: {lt['status']}
+                        </span>
+                        <span style="font-size:11px;color:#166534;font-family:monospace;background:#dcfce7;border:1px solid #bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700;">
+                            🕒 {lt['timestamp']}
+                        </span>
+                    </div>
+                    <div style="margin-top:8px;font-size:12px;color:#14532d;line-height:1.6;">
+                        • <strong>Filtro em Operação:</strong> <code style="color:#0f5132;background:#dcfce7;padding:1px 6px;border-radius:3px;font-weight:bold;">{lt['nome']}</code> ({lt['modo']})<br>
+                        • <strong>Volume Analisado:</strong> <strong>{lt['qtd_dezenas']} dezenas</strong> computadas nas linhas, colunas, diagonais, paridade e moldura.<br>
+                        • <strong>Dezenas Auditadas:</strong> <span style="font-family:monospace;color:#166534;font-weight:700;">{dezenas_formatadas}</span><br>
+                        • <strong>Sincronização:</strong> Gravado na lista de predefinições manuais e ativo no motor combinatório ({pool_info}).
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-left:6px solid #94a3b8;border-radius:8px;padding:10px 14px;color:#64748b;font-size:12px;">
+                    ⚪ <strong>LINHA DE TRABALHO (OCIOSA):</strong> Nenhuma extração executada nesta sessão. Digite as dezenas acima e clique em <em>'Gerar, Gravar e Ativar Filtro Deste Conjunto'</em> para processar e gravar.
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
     with st.container(border=True):
         st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
