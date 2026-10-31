@@ -29,7 +29,7 @@ MOLDURA_SET = (
     {r * 10 + 10 for r in range(6)}
 )
 
-TOP_LINHA_01 = {2, 4, 5, 8, 10}
+DEZENAS_BASE_3010 = {5, 9, 16, 40, 41, 59}
 
 FALLBACK_MEGASENA = [
     [4, 12, 18, 30, 35, 54], [1, 9, 15, 23, 44, 52], [7, 14, 27, 39, 48, 59],
@@ -41,7 +41,7 @@ FALLBACK_MEGASENA = [
     [6, 13, 29, 40, 46, 51], [12, 19, 32, 41, 50, 58]
 ]
 
-# Tabelas de consulta rápida (Lookups para aceleração)
+# Lookups vetorizados para validação rápida
 PAR_LOOKUP = [False] + [(n % 2 == 0) for n in range(1, 61)]
 PRIMO_LOOKUP = [False] + [(n in PRIMOS_MEGASENA) for n in range(1, 61)]
 MOLDURA_LOOKUP = [False] + [(n in MOLDURA_SET) for n in range(1, 61)]
@@ -80,14 +80,64 @@ OPCOES_QUANTIDADE = {
 }
 
 PRESETS_PADRAO = {
-    "⭐ Filtro Mestre: Duplas & Top L01": {
+    "FILTRO3010": {
+        "linhas": [
+            "Exatamente 2",
+            "Exatamente 1",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "Exatamente 1",
+            "Exatamente 1"
+        ],
+        "colunas": [
+            "Exatamente 1",
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "Exatamente 1",
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "Exatamente 2",
+            "Exatamente 1"
+        ],
+        "diag_cresc": [
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "Exatamente 1",
+            "Exatamente 2",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "0 (Nenhuma)"
+        ],
+        "diag_decresc": [
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "Exatamente 2",
+            "0 (Nenhuma)",
+            "Exatamente 2",
+            "0 (Nenhuma)",
+            "Exatamente 1",
+            "0 (Nenhuma)"
+        ],
+        "primos": [3],
+        "pares": ["2P / 4I"],
+        "moldura": [5],
+        "soma": (150, 190)
+    },
+    "FILTRO3010_DUPLAS (Gerador Aberto)": {
         "linhas": ["1 ou 2", "0 a 2", "0 a 2", "0 a 2", "0 a 2", "0 a 2"],
         "colunas": ["0 a 2"] * 10,
         "diag_cresc": ["0 a 2"] * 10,
         "diag_decresc": ["0 a 2"] * 10,
         "primos": [1, 2, 3],
         "pares": ["3P / 3I", "4P / 2I", "2P / 4I"],
-        "moldura": [2, 3, 4],
+        "moldura": [2, 3, 4, 5],
         "soma": (120, 245)
     },
     "MEGA60: 1 por Linha Padrão (6 Dezenas)": {
@@ -99,28 +149,72 @@ PRESETS_PADRAO = {
         "pares": ["3P / 3I", "2P / 4I", "4P / 2I"],
         "moldura": [2, 3, 4],
         "soma": (110, 240)
-    },
-    "Desdobramento 8 Dezenas (2-1-1-1-1-2)": {
-        "linhas": ["Exatamente 2", "Exatamente 1", "Exatamente 1", "Exatamente 1", "Exatamente 1", "Exatamente 2"],
-        "colunas": ["0 ou 1"] * 10,
-        "diag_cresc": ["0 ou 1"] * 10,
-        "diag_decresc": ["0 ou 1"] * 10,
-        "primos": [1, 2, 3],
-        "pares": ["3P / 3I", "4P / 2I", "2P / 4I"],
-        "moldura": [2, 3, 4, 5],
-        "soma": (120, 260)
-    },
-    "Filtro Livre para Testes Rápidos": {
-        "linhas": ["Livre (0 a 6)"] * 6,
-        "colunas": ["Livre (0 a 6)"] * 10,
-        "diag_cresc": ["Livre (0 a 6)"] * 10,
-        "diag_decresc": ["Livre (0 a 6)"] * 10,
-        "primos": [0, 1, 2, 3, 4, 5],
-        "pares": ["3P / 3I", "2P / 4I", "4P / 2I", "1P / 5I", "5P / 1I"],
-        "moldura": [1, 2, 3, 4, 5],
-        "soma": (70, 290)
     }
 }
+
+# ==============================================================================
+# ENGENHARIA REVERSA: EXTRAÇÃO AUTOMÁTICA DE FILTROS A PARTIR DE 6 DEZENAS
+# ==============================================================================
+def mapear_quantidade_para_rotulo(qtd, modo="exato"):
+    if modo == "exato":
+        mapa = {
+            0: "0 (Nenhuma)",
+            1: "Exatamente 1",
+            2: "Exatamente 2",
+            3: "Exatamente 3",
+            4: "Exatamente 4"
+        }
+        return mapa.get(qtd, "Livre (0 a 6)")
+    else:
+        return "0 a 2" if qtd <= 2 else "Livre (0 a 6)"
+
+def extrair_filtros_de_jogo(dezenas, modo="exato", margem_soma=20):
+    dezenas = sorted(list(set(dezenas)))
+    if len(dezenas) != 6:
+        return None
+
+    l_cnt = [0] * 6
+    c_cnt = [0] * 10
+    dc_cnt = [0] * 10
+    dd_cnt = [0] * 10
+
+    for n in dezenas:
+        l_cnt[ROW_LOOKUP[n]] += 1
+        c_cnt[COL_LOOKUP[n]] += 1
+        dc_cnt[DC_LOOKUP[n]] += 1
+        dd_cnt[DD_LOOKUP[n]] += 1
+
+    pares = sum(1 for n in dezenas if PAR_LOOKUP[n])
+    primos = sum(1 for n in dezenas if PRIMO_LOOKUP[n])
+    moldura = sum(1 for n in dezenas if MOLDURA_LOOKUP[n])
+    soma_total = sum(dezenas)
+
+    if modo == "exato":
+        return {
+            "linhas": [mapear_quantidade_para_rotulo(q, "exato") for q in l_cnt],
+            "colunas": [mapear_quantidade_para_rotulo(q, "exato") for q in c_cnt],
+            "diag_cresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dc_cnt],
+            "diag_decresc": [mapear_quantidade_para_rotulo(q, "exato") for q in dd_cnt],
+            "primos": [primos],
+            "pares": [f"{pares}P / {6 - pares}I"],
+            "moldura": [moldura],
+            "soma": (max(50, soma_total - margem_soma), min(320, soma_total + margem_soma))
+        }
+    else:
+        primos_range = sorted(list({max(0, primos - 1), primos, min(6, primos + 1)}))
+        moldura_range = sorted(list({max(0, moldura - 1), moldura, min(6, moldura + 1)}))
+        pares_opcoes = list({f"{pares}P / {6 - pares}I", "3P / 3I", "4P / 2I", "2P / 4I"})
+
+        return {
+            "linhas": ["1 ou 2" if l_cnt[0] in (1, 2) else "0 a 2"] + ["0 a 2"] * 5,
+            "colunas": ["0 a 2"] * 10,
+            "diag_cresc": ["0 a 2"] * 10,
+            "diag_decresc": ["0 a 2"] * 10,
+            "primos": primos_range,
+            "pares": pares_opcoes,
+            "moldura": moldura_range,
+            "soma": (max(50, soma_total - 30), min(320, soma_total + 30))
+        }
 
 # ==============================================================================
 # MOTOR TÉRMICO DE ELLIOTT
@@ -163,15 +257,13 @@ def calcular_metricas_elliott(historico):
     return dados
 
 # ==============================================================================
-# MOTOR MATEMÁTICO: VALIDAÇÃO DE ALTA VELOCIDADE
+# MOTOR MATEMÁTICO: VALIDAÇÃO DE ALTA PERFORMANCE
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
-    # 1. Curto-circuito por soma
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
     if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
         return False
 
-    # 2. Curto-circuito por paridade
     pares_cnt = (
         PAR_LOOKUP[jogo[0]] + PAR_LOOKUP[jogo[1]] + PAR_LOOKUP[jogo[2]] +
         PAR_LOOKUP[jogo[3]] + PAR_LOOKUP[jogo[4]] + PAR_LOOKUP[jogo[5]]
@@ -179,7 +271,6 @@ def validar_aposta_final_6(jogo, cfg):
     if pares_cnt not in cfg["pares_aceitos"]:
         return False
 
-    # 3. Curto-circuito por primos e moldura
     primos_cnt = (
         PRIMO_LOOKUP[jogo[0]] + PRIMO_LOOKUP[jogo[1]] + PRIMO_LOOKUP[jogo[2]] +
         PRIMO_LOOKUP[jogo[3]] + PRIMO_LOOKUP[jogo[4]] + PRIMO_LOOKUP[jogo[5]]
@@ -194,7 +285,6 @@ def validar_aposta_final_6(jogo, cfg):
     if moldura_cnt not in cfg["moldura_aceita"]:
         return False
 
-    # 4. Distribuição matricial (Linhas, Colunas e Diagonais)
     linhas_count = [0] * 6
     cols_count = [0] * 10
     dc_count = [0] * 10
@@ -221,7 +311,6 @@ def validar_aposta_final_6(jogo, cfg):
         if dd_count[dd] > cfg["diag_decresc"][dd][1]:
             return False
 
-    # Verificação de limites mínimos
     for r in range(6):
         if linhas_count[r] < cfg["linhas"][r][0]:
             return False
@@ -346,7 +435,7 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
             if n in jogo_set and n in sorteio_set:
                 celulas += f'<div style="width:34px;height:34px;background:#16a34a;color:#ffffff;font-weight:900;border:2px solid #0f5132;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}<span style="font-size:8px;line-height:6px;">★</span></div>'
             elif n in jogo_set:
-                celulas += f'<div style="width:34px;height:34px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
+                celulas += f'<div style="width:34px;height:34px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:6px;display:align-items:center;justify-content:center;font-family:monospace;font-size:11px;display:flex;">{n:02d}</div>'
             elif n in sorteio_set:
                 celulas += f'<div style="width:34px;height:34px;background:#fef08a;color:#854d0e;font-weight:800;border:2px dashed #ca8a04;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
             else:
@@ -369,7 +458,7 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
     components.html(html, height=330, scrolling=False)
 
 # ==============================================================================
-# INICIALIZAÇÃO DE ESTADO COM FILTRO MESTRE NA ENTRADA
+# INICIALIZAÇÃO DE ESTADO
 # ==============================================================================
 if "historico" not in st.session_state:
     st.session_state.historico = [list(j) for j in FALLBACK_MEGASENA]
@@ -388,8 +477,7 @@ dados_calor = calcular_metricas_elliott(st.session_state.historico)
 ranking_elliott = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
 top_40_dezenas = {item["numero"] for item in ranking_elliott[:40]}
 
-# Incorpora as melhores da Linha 01 no pool de trabalho ativo
-pool_inicial = (top_40_dezenas | TOP_LINHA_01)
+pool_inicial = top_40_dezenas | DEZENAS_BASE_3010
 
 if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.pool_trabalho, set):
     st.session_state.pool_trabalho = pool_inicial.copy()
@@ -409,9 +497,8 @@ def aplicar_preset(nome_preset):
     st.session_state["sel_moldura"] = cfg_p["moldura"]
     st.session_state["sel_soma"] = tuple(cfg_p["soma"])
 
-# Carga automática do Filtro Mestre na primeira execução
 if "filtro_inicial_carregado" not in st.session_state:
-    aplicar_preset("⭐ Filtro Mestre: Duplas & Top L01")
+    aplicar_preset("FILTRO3010")
     st.session_state.filtro_inicial_carregado = True
 
 def toggle_dezena(n):
@@ -422,7 +509,6 @@ def toggle_dezena(n):
     else:
         st.session_state.pool_trabalho.add(n)
 
-# Auxiliar de cores térmicas
 max_sc = max(d["score"] for d in dados_calor.values())
 min_sc = min(d["score"] for d in dados_calor.values())
 delta_sc = max(0.1, max_sc - min_sc)
@@ -442,11 +528,11 @@ def obter_estilo_calor(score):
 # INTERFACE PRINCIPAL
 # ==============================================================================
 st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
-st.caption("Matriz 6x10 com Dinâmica de Ondas • Varredura dos 7 Quadros • Gravação de Predefinições • Conferidor Oficial")
+st.caption("Matriz 6x10 • Engenharia Reversa de Sorteios • Geração Inteligente de Filtros")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎟️ Cartela Térmica (Pool Ativo)",
-    "🎛️ Filtros & Gravação",
+    "🎛️ Filtros & Engenharia Reversa",
     "🗺️ Volante & Raio-X",
     "📥 Upload & Conferência",
     "📊 Histórico & API Caixa"
@@ -457,12 +543,12 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 # ==============================================================================
 with tab_cartela:
     st.subheader("🎟️ Cartela de Calor Interativa (Matriz 6x10)")
-    st.markdown("Cada dezena exibe sua pontuação de impulso/retração. **Clique para ativar ou retirar do pool de apostas:**")
+    st.markdown("Clique em qualquer número para adicionar ou remover do pool de apostas:")
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
-        if st.button("🌊 Restaurar Top 40 + Top L01", use_container_width=True):
-            st.session_state.pool_trabalho = (top_40_dezenas | TOP_LINHA_01).copy()
+        if st.button("⭐ Carregar Pool 3010 + Top 40", use_container_width=True):
+            st.session_state.pool_trabalho = (top_40_dezenas | DEZENAS_BASE_3010).copy()
             st.rerun()
     with c_b2:
         if st.button("🔥 Apenas Quentes (Top 20)", use_container_width=True):
@@ -508,7 +594,7 @@ with tab_cartela:
         st.markdown(
             "**Legenda de Calor:** &nbsp; "
             "<span style='color:#dc2626;font-weight:700;'>🔥 Ultra Quente (Onda 3)</span> &nbsp;|&nbsp; "
-            "<span style='color:#ea580c;font-weight:700;'>☀️ Quente (Retração Fib Ótima)</span> &nbsp;|&nbsp; "
+            "<span style='color:#ea580c;font-weight:700;'>☀️ Quente (Retração Fib)</span> &nbsp;|&nbsp; "
             "<span style='color:#ca8a04;font-weight:700;'>🌤️ Morno (Acumulação)</span> &nbsp;|&nbsp; "
             "<span style='color:#64748b;font-weight:700;'>❄️ Frio (Repouso)</span>",
             unsafe_allow_html=True
@@ -521,25 +607,88 @@ with tab_cartela:
         st.caption(f"Espaço Bruto: **{total_comb:,}** jogos")
 
 # ==============================================================================
-# ABA 2: CONFIGURAÇÃO DOS FILTROS E PREDEFINIÇÕES
+# ABA 2: CONFIGURAÇÃO DOS FILTROS & ENGENHARIA REVERSA
 # ==============================================================================
 with tab_config:
-    st.markdown("### 🎛️ Filtros Estruturais & Gerenciador de Predefinições")
+    st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
+    # --------------------------------------------------------------------------
+    # MÓDULO NOVO: ENGENHARIA REVERSA DIRETO DO RESULTADO
+    # --------------------------------------------------------------------------
     with st.container(border=True):
-        st.markdown("#### 💾 Gerenciador de Predefinições (Salvar & Carregar)")
+        st.markdown("#### ⚡ Engenharia Reversa: Gerar e Gravar Filtro por Resultado")
+        st.caption("Digite as 6 dezenas sorteadas. O sistema disseca todas as linhas, colunas, diagonais e métricas, salvando e ativando o filtro instantaneamente.")
+
+        col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
+        
+        ult_res_padrao = " ".join([f"{n:02d}" for n in st.session_state.historico[-1]]) if st.session_state.historico else "05 09 16 40 41 59"
+        
+        with col_input_res:
+            entrada_dezenas_filtro = st.text_input(
+                "6 Dezenas Sorteadas (espaço ou vírgula):",
+                value=ult_res_padrao,
+                key="input_resultado_reverso"
+            )
+        with col_input_nome:
+            nome_filtro_novo = st.text_input(
+                "Nome para Salvar o Filtro:",
+                value="MEU_NOVO_FILTRO",
+                key="input_nome_filtro_auto"
+            )
+        with col_input_tipo:
+            tipo_tolerancia = st.selectbox(
+                "Nível de Tolerância:",
+                ["Perfil Exato (Cópia Fiel)", "Perfil Flexível (Duplas 0 a 2)"],
+                index=0,
+                key="select_modo_reverso"
+            )
+
+        c_btn_rev1, c_btn_rev2 = st.columns([2, 1])
+        with c_btn_rev1:
+            if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Resultado", type="primary", use_container_width=True):
+                nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_dezenas_filtro)]
+                dezenas_limpas = sorted(list(set([n for n in nums_parse if 1 <= n <= 60])))
+
+                if len(dezenas_limpas) != 6:
+                    st.error("Por favor, informe exatamente 6 dezenas válidas (entre 01 e 60).")
+                elif not nome_filtro_novo.strip():
+                    st.error("Informe um nome para o novo filtro.")
+                else:
+                    modo_sel = "exato" if tipo_tolerancia.startswith("Perfil Exato") else "flexivel"
+                    preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
+                    nome_salvar = nome_filtro_novo.strip()
+                    
+                    st.session_state.presets_filtros[nome_salvar] = preset_extraido
+                    aplicar_preset(nome_salvar)
+                    
+                    # Garante que as dezenas analisadas entrem no pool de trabalho
+                    st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | set(dezenas_limpas)
+                    
+                    st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
+                    st.rerun()
+
+        with c_btn_rev2:
+            if st.button("🔄 Puxar Último Concurso", use_container_width=True):
+                st.session_state.input_resultado_reverso = " ".join([f"{n:02d}" for n in st.session_state.historico[-1]])
+                st.rerun()
+
+    # --------------------------------------------------------------------------
+    # GERENCIADOR DE PREDEFINIÇÕES (SALVAR / CARREGAR / EXPORTAR / IMPORTAR)
+    # --------------------------------------------------------------------------
+    with st.container(border=True):
+        st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
         col_puxar, col_gravar = st.columns(2)
 
         with col_puxar:
-            st.markdown("**📥 Puxar / Carregar Filtro Salvo:**")
+            st.markdown("**📥 Carregar Filtro Salvo:**")
             lista_nomes = list(st.session_state.presets_filtros.keys())
-            filtro_escolhido = st.selectbox("Selecione o filtro:", lista_nomes, key="select_preset_load")
+            filtro_escolhido = st.selectbox("Selecione o filtro:", lista_nomes, index=0, key="select_preset_load")
             
             c_pux1, c_pux2 = st.columns(2)
             with c_pux1:
-                if st.button("🚀 Aplicar Predefinição", use_container_width=True, type="primary"):
+                if st.button("🚀 Aplicar Predefinição", use_container_width=True):
                     aplicar_preset(filtro_escolhido)
-                    st.success(f"Filtro '{filtro_escolhido}' carregado!")
+                    st.success(f"Filtro '{filtro_escolhido}' carregado com sucesso!")
                     st.rerun()
             with c_pux2:
                 json_presets = json.dumps(st.session_state.presets_filtros, indent=2, ensure_ascii=False)
@@ -552,12 +701,12 @@ with tab_config:
                 )
 
         with col_gravar:
-            st.markdown("**💾 Gravar Configuração Atual:**")
-            nome_novo_filtro = st.text_input("Nome da nova predefinição:", placeholder="Ex: Duplas Personalizadas", key="input_nome_filtro")
+            st.markdown("**💾 Gravar Configuração Manual Atual:**")
+            nome_novo_filtro = st.text_input("Nome da predefinição manual:", placeholder="Ex: Meu Filtro Estrutural", key="input_nome_filtro_manual")
             
             c_grv1, c_grv2 = st.columns(2)
             with c_grv1:
-                if st.button("💾 Gravar Agora", use_container_width=True):
+                if st.button("💾 Gravar Manual", use_container_width=True):
                     if not nome_novo_filtro.strip():
                         st.error("Informe um nome para a predefinição.")
                     else:
@@ -566,10 +715,10 @@ with tab_config:
                             "colunas": [st.session_state.get(f"sel_c_{c}", "0 a 2") for c in range(10)],
                             "diag_cresc": [st.session_state.get(f"sel_dc_{d}", "0 a 2") for d in range(10)],
                             "diag_decresc": [st.session_state.get(f"sel_dd_{d}", "0 a 2") for d in range(10)],
-                            "primos": st.session_state.get("sel_primos", [1, 2, 3]),
-                            "pares": st.session_state.get("sel_pares", ["3P / 3I", "4P / 2I", "2P / 4I"]),
-                            "moldura": st.session_state.get("sel_moldura", [2, 3, 4]),
-                            "soma": st.session_state.get("sel_soma", (120, 245))
+                            "primos": st.session_state.get("sel_primos", [3]),
+                            "pares": st.session_state.get("sel_pares", ["2P / 4I"]),
+                            "moldura": st.session_state.get("sel_moldura", [5]),
+                            "soma": st.session_state.get("sel_soma", (150, 190))
                         }
                         st.session_state.presets_filtros[nome_novo_filtro.strip()] = novo_preset
                         st.success(f"Predefinição '{nome_novo_filtro.strip()}' gravada!")
@@ -586,15 +735,16 @@ with tab_config:
 
     st.divider()
 
+    opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
+
     # Linhas
     with st.container(border=True):
         st.markdown("#### 1️⃣ Linhas Individuais (L01 a L06)")
         cols_l = st.columns(6)
         limites_linhas = []
-        opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
         for r in range(6):
             with cols_l[r]:
-                val_padrao = st.session_state.get(f"sel_l_{r}", "1 ou 2" if r == 0 else "0 a 2")
+                val_padrao = st.session_state.get(f"sel_l_{r}", "0 a 2")
                 idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 0
                 esc = st.selectbox(f"Linha {r+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_l_{r}")
                 limites_linhas.append(OPCOES_QUANTIDADE[esc])
@@ -608,7 +758,7 @@ with tab_config:
             alvo = cols_c_up[c] if c < 5 else cols_c_dw[c - 5]
             with alvo:
                 val_padrao = st.session_state.get(f"sel_c_{c}", "0 a 2")
-                idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 0
                 esc = st.selectbox(f"Coluna {c+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_c_{c}")
                 limites_colunas.append(OPCOES_QUANTIDADE[esc])
 
@@ -621,7 +771,7 @@ with tab_config:
                 limites_dc = []
                 for d in range(10):
                     val_padrao = st.session_state.get(f"sel_dc_{d}", "0 a 2")
-                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 0
                     esc = st.selectbox(f"DC{d+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_dc_{d}")
                     limites_dc.append(OPCOES_QUANTIDADE[esc])
     with c_diag2:
@@ -631,7 +781,7 @@ with tab_config:
                 limites_dd = []
                 for d in range(10):
                     val_padrao = st.session_state.get(f"sel_dd_{d}", "0 a 2")
-                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 8
+                    idx_sel = opcoes_nomes.index(val_padrao) if val_padrao in opcoes_nomes else 0
                     esc = st.selectbox(f"DD{d+1:02d}", opcoes_nomes, index=idx_sel, key=f"sel_dd_{d}")
                     limites_dd.append(OPCOES_QUANTIDADE[esc])
 
@@ -640,15 +790,15 @@ with tab_config:
         st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
         with c_p1:
-            primos_sel = st.multiselect("Quantidade de Primos:", list(range(7)), default=st.session_state.get("sel_primos", [1, 2, 3]), key="sel_primos")
+            primos_sel = st.multiselect("Quantidade de Primos:", list(range(7)), default=st.session_state.get("sel_primos", [3]), key="sel_primos")
         with c_p2:
             opcoes_par = {"3P / 3I": 3, "2P / 4I": 2, "4P / 2I": 4, "1P / 5I": 1, "5P / 1I": 5, "0P / 6I": 0, "6P / 0I": 6}
-            par_sel = st.multiselect("Pares / Ímpares:", list(opcoes_par.keys()), default=st.session_state.get("sel_pares", ["3P / 3I", "4P / 2I", "2P / 4I"]), key="sel_pares")
+            par_sel = st.multiselect("Pares / Ímpares:", list(opcoes_par.keys()), default=st.session_state.get("sel_pares", ["2P / 4I"]), key="sel_pares")
             pares_valores = {opcoes_par[k] for k in par_sel}
         with c_p3:
-            moldura_sel = st.multiselect("Dezenas na Moldura:", list(range(7)), default=st.session_state.get("sel_moldura", [2, 3, 4]), key="sel_moldura")
+            moldura_sel = st.multiselect("Dezenas na Moldura:", list(range(7)), default=st.session_state.get("sel_moldura", [5]), key="sel_moldura")
         with c_p4:
-            faixa_soma = st.slider("Faixa de Soma:", 50, 320, st.session_state.get("sel_soma", (120, 245)), key="sel_soma")
+            faixa_soma = st.slider("Faixa de Soma:", 50, 320, st.session_state.get("sel_soma", (150, 190)), key="sel_soma")
 
     config_total = {
         "linhas": limites_linhas,
@@ -665,7 +815,7 @@ with tab_config:
 
     c_exec1, c_exec2 = st.columns([3, 1])
     with c_exec2:
-        teto_apostas = st.number_input("Teto Máximo de Jogos:", min_value=10, max_value=50000, value=1000, step=100)
+        teto_apostas = st.number_input("Teto Máximo de Jogos:", min_value=1, max_value=50000, value=500, step=50)
 
     with c_exec1:
         placeholder_metricas = st.empty()
@@ -673,9 +823,9 @@ with tab_config:
 
     pode_processar = len(st.session_state.pool_trabalho) >= 6
 
-    if st.button("🚀 Gerar e Filtrar Apostas das Dezenas do Pool", use_container_width=True, disabled=not pode_processar, type="primary"):
+    if st.button("🚀 Gerar e Filtrar Apostas com a Configuração Ativa", use_container_width=True, disabled=not pode_processar, type="primary"):
         if not primos_sel or not par_sel or not moldura_sel:
-            st.error("Configure todos os critérios básicos (Primos, Pares e Moldura).")
+            st.error("Selecione os parâmetros de Primos, Pares e Moldura.")
         else:
             with st.status("🛠️ Processando Motor Combinatório...", expanded=True) as status_box:
                 t0 = time.time()
@@ -693,13 +843,13 @@ with tab_config:
 
                 if total_gerado > 0:
                     status_box.update(
-                        label=f"✅ Sucesso! {total_gerado:,} apostas oficiais aprovadas em {t_fim:.2f}s.",
+                        label=f"✅ Sucesso! {total_gerado:,} aposta(s) aprovada(s) em {t_fim:.2f}s.",
                         state="complete",
                         expanded=False
                     )
                 else:
                     status_box.update(
-                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu a todos os filtros.",
+                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu a todos os critérios.",
                         state="error",
                         expanded=True
                     )
@@ -773,7 +923,7 @@ with tab_volante:
                 st.divider()
                 st.markdown(f"**Pares/Ímpares:** `{pa}P / {6-pa}I` | **Primos:** `{pr}` | **Moldura:** `{mo}` | **Soma:** `{sum(jogo_ativo)}`")
     else:
-        st.info("Gere jogos na aba de filtros para inspecionar no volante.")
+        st.info("Gere apostas para visualizá-las no volante oficial.")
 
 # ==============================================================================
 # ABA 4: UPLOAD & CONFERÊNCIA
