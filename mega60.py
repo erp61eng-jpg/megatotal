@@ -7,6 +7,7 @@ import math
 import time
 import re
 import json
+import io
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -362,7 +363,7 @@ def calcular_metricas_elliott(historico):
     return dados
 
 # ==============================================================================
-# MOTOR COMBINATÓRIO
+# MOTOR COMBINATÓRIO & FILTRAGEM
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
@@ -430,7 +431,7 @@ def validar_aposta_final_6(jogo, cfg):
 
     return True
 
-def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, ticker_metricas, teto_max=1000):
+def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, ticker_metricas, teto_max=None):
     t_inicio = time.time()
     dezenas_candidatas = sorted(list(pool_dezenas))
     k_escolhidas = len(dezenas_candidatas)
@@ -440,27 +441,31 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
         return []
 
     total_combinacoes = math.comb(k_escolhidas, 6)
+    alvo_txt = f"{teto_max:,}" if teto_max is not None else "ILIMITADO (Todas as Aprovadas)"
     container_status.write(
-        f"🎯 **Varredura Ativa:** {k_escolhidas} dezenas selecionadas. "
-        f"Espaço amostral: **{total_combinacoes:,} jogos de 6 números**."
+        f"🎯 **Varredura Ativa:** {k_escolhidas} dezenas selecionadas | "
+        f"Espaço total: **{total_combinacoes:,} jogos** | Teto: **{alvo_txt}**"
     )
 
     jogos_aprovados = []
     testadas = 0
-    lote_update = max(1000, min(100000, total_combinacoes // 25))
+    t_ultimo_update = 0.0
 
     for comb in combinations(dezenas_candidatas, 6):
         testadas += 1
-        if validar_aposta_final_6(comb, cfg):
-            jogos_aprovados.append(list(comb))
-            if len(jogos_aprovados) >= teto_max:
+        comb_ordenada = sorted(comb)
+
+        if validar_aposta_final_6(comb_ordenada, cfg):
+            jogos_aprovados.append(comb_ordenada)
+            if teto_max is not None and len(jogos_aprovados) >= teto_max:
                 break
 
-        if testadas % lote_update == 0:
+        t_agora = time.time()
+        if t_agora - t_ultimo_update >= 0.25:
+            t_ultimo_update = t_agora
             prog = min(1.0, testadas / total_combinacoes)
             bar_progresso.progress(prog)
-            delta_t = max(0.001, time.time() - t_inicio)
-            velocidade = int(testadas / delta_t)
+            velocidade = int(testadas / max(0.001, t_agora - t_inicio))
             ticker_metricas.markdown(
                 f"**Processando:** `{testadas:,}` de `{total_combinacoes:,}` ({prog*100:.1f}%) | "
                 f"Aprovadas: `{len(jogos_aprovados):,}` | "
@@ -471,7 +476,7 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
     delta_final = max(0.001, time.time() - t_inicio)
     ticker_metricas.markdown(
         f"**Concluído:** `{testadas:,}` combinações testadas | "
-        f"Aprovados: `{len(jogos_aprovados):,}` apostas | "
+        f"Aprovadas: `{len(jogos_aprovados):,}` apostas | "
         f"Tempo total: `{delta_final:.2f}s`"
     )
     return jogos_aprovados
@@ -565,7 +570,7 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
 # INICIALIZAÇÃO DE ESTADO
 # ==============================================================================
 if "historico" not in st.session_state:
-    st.session_state.historico = [list(j) for j in FALLBACK_MEGASENA]
+    st.session_state.historico = [sorted(list(j)) for j in FALLBACK_MEGASENA]
     st.session_state.origem = "Base Local Offline"
 
 if "jogos_aprovados" not in st.session_state:
@@ -574,12 +579,15 @@ if "jogos_aprovados" not in st.session_state:
 if "jogos_upload" not in st.session_state:
     st.session_state.jogos_upload = []
 
+if "jogos_filtrados_upload" not in st.session_state:
+    st.session_state.jogos_filtrados_upload = []
+
 if "presets_filtros" not in st.session_state:
     st.session_state.presets_filtros = PRESETS_PADRAO.copy()
 
 if "input_resultado_reverso_val" not in st.session_state:
     ult_res = st.session_state.historico[-1] if st.session_state.historico else [5, 9, 16, 40, 41, 59]
-    st.session_state.input_resultado_reverso_val = " ".join([f"{n:02d}" for n in ult_res])
+    st.session_state.input_resultado_reverso_val = " ".join([f"{n:02d}" for n in sorted(ult_res)])
 
 if "linha_trabalho_reverso" not in st.session_state:
     st.session_state.linha_trabalho_reverso = None
@@ -622,7 +630,7 @@ def toggle_dezena(n):
 def cb_puxar_ultimo():
     if st.session_state.historico:
         st.session_state.input_resultado_reverso_val = " ".join(
-            [f"{n:02d}" for n in st.session_state.historico[-1]]
+            [f"{n:02d}" for n in sorted(st.session_state.historico[-1])]
         )
 
 max_sc = max(d["score"] for d in dados_calor.values())
@@ -643,13 +651,13 @@ def obter_estilo_calor(score):
 # INTERFACE PRINCIPAL
 # ==============================================================================
 st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
-st.caption("Matriz 6x10 • Engenharia Reversa Multiconcursos • Monitor da Linha de Trabalho")
+st.caption("Matriz 6x10 • Engenharia Reversa Multiconcursos • Motor Combinatório Completo")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
     "🎟️ Cartela Térmica (Pool Ativo)",
     "🎛️ Filtros & Engenharia Reversa",
     "🗺️ Volante & Raio-X",
-    "📥 Upload & Conferência",
+    "📥 Upload & Filtragem Sucessiva",
     "📊 Histórico & API Caixa"
 ])
 
@@ -720,12 +728,11 @@ with tab_cartela:
         st.caption(f"Espaço Bruto: **{total_comb:,}** jogos")
 
 # ==============================================================================
-# ABA 2: CONFIGURAÇÃO DOS FILTROS & ENGENHARIA REVERSA
+# ABA 2: CONFIGURAÇÃO DOS FILTROS & MOTOR COMBINATÓRIO ILIMITADO
 # ==============================================================================
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
-    # SUB-ABA / SEÇÃO: DUAS ROTINAS REVERSAS (CONCURSOS HISTÓRICOS VS DEZENAS DIGITADAS)
     tipo_reverso = st.radio(
         "Selecione a Rotina de Engenharia Reversa Desejada:",
         [
@@ -735,16 +742,12 @@ with tab_config:
         horizontal=True
     )
 
-    # --------------------------------------------------------------------------
-    # ROTINA 1: HISTÓRICA MULTICONCURSOS
-    # --------------------------------------------------------------------------
     if tipo_reverso.startswith("🏛️ Rotina 1"):
         with st.container(border=True):
             st.markdown("#### 🏛️ Engenharia Reversa Multiconcursos: Otimização Histórica")
             st.caption(
                 "Escolha a quantidade de concursos anteriores recentes para sintetizar o **Melhor Filtro Combinado**. "
-                "O motor analisa linha por linha, coluna por coluna, diagonais, somas e paridades de todos esses resultados, "
-                "criando a moldura matemática precisa que cobriu 100% desses concursos."
+                "O motor sintetiza a moldura que cobriu 100% desses concursos."
             )
 
             total_disp = len(st.session_state.historico)
@@ -812,9 +815,6 @@ with tab_config:
                     st.success(f"🎉 Sucesso! O melhor filtro para os últimos {qtd_concursos_sel} concursos foi sintetizado e ativado!")
                     st.rerun()
 
-    # --------------------------------------------------------------------------
-    # ROTINA 2: AMOSTRA PERSONALIZADA (6 A 60 DEZENAS)
-    # --------------------------------------------------------------------------
     else:
         with st.container(border=True):
             st.markdown("#### ⚡ Engenharia Reversa por Dezenas Digitadas (6 a 60 Números)")
@@ -890,14 +890,12 @@ with tab_config:
             with c_btn_rev2:
                 st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
 
-    # --------------------------------------------------------------------------
-    # LINHA DE TRABALHO & SINAL DE OPERAÇÃO (EXIBE STATUS DE AMBAS AS ROTINAS)
-    # --------------------------------------------------------------------------
+    # Linha de Trabalho
     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
     if st.session_state.linha_trabalho_reverso:
         lt = st.session_state.linha_trabalho_reverso
         is_multi = lt.get("tipo") == "MULTICONCURSOS"
-        dezenas_formatadas = " - ".join([f"{n:02d}" for n in lt["dezenas"]])
+        dezenas_formatadas = " - ".join([f"{n:02d}" for n in sorted(lt["dezenas"])])
         pool_info = "Cartela sincronizada com este pool" if lt["pool_atualizado"] else "Cartela prévia preservada"
 
         if is_multi:
@@ -928,25 +926,14 @@ with tab_config:
                 <div style="margin-top:8px;font-size:12px;color:#14532d;line-height:1.6;">
                     • <strong>Filtro Ativo:</strong> <code style="color:#0f5132;background:#dcfce7;padding:1px 6px;border-radius:3px;font-weight:bold;">{lt['nome']}</code> ({lt['modo']})<br>
                     {detalhes_audit}<br>
-                    • <strong>Sincronização:</strong> Gravado no catálogo de predefinições e aplicado aos seletores abaixo ({pool_info}).
+                    • <strong>Sincronização:</strong> Gravado no catálogo de predefinições ({pool_info}).
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-    else:
-        st.markdown(
-            """
-            <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-left:6px solid #94a3b8;border-radius:8px;padding:10px 14px;color:#64748b;font-size:12px;margin-bottom:15px;">
-                ⚪ <strong>LINHA DE TRABALHO (AGUARDANDO):</strong> Nenhuma rotina executada. Escolha uma das opções acima e clique em processar para gerar e visualizar os dados em tempo real.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
 
-    # --------------------------------------------------------------------------
-    # GERENCIADOR DE PREDEFINIÇÕES (CARREGAR / SALVAR / BAIXAR)
-    # --------------------------------------------------------------------------
+    # Gerenciador de Predefinições
     with st.container(border=True):
         st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
         col_puxar, col_gravar = st.columns(2)
@@ -1079,51 +1066,93 @@ with tab_config:
     }
 
     st.divider()
-    c_exec1, c_exec2 = st.columns([3, 1])
-    with c_exec2:
-        teto_apostas = st.number_input("Teto Máximo de Jogos:", min_value=1, max_value=50000, value=500, step=50)
 
-    with c_exec1:
-        placeholder_metricas = st.empty()
-        barra_progresso = st.progress(0, text="Aguardando comando...")
+    # CONTROLE DE GERAÇÃO: OPÇÃO SEM LIMITE (TOTAL DE JOGOS)
+    st.markdown("#### ⚙️ Controle de Execução e Teto de Combinações")
+    c_ctrl1, c_ctrl2 = st.columns([2, 2])
+    with c_ctrl1:
+        sem_limite = st.checkbox(
+            "♾️ **Sem Limite (Gerar Todas as Combinações Válidas)**",
+            value=True,
+            help="Desativa qualquer teto. O motor vai testar todo o pool e gerar 100% dos jogos que passarem nos filtros."
+        )
+    with c_ctrl2:
+        if not sem_limite:
+            teto_apostas = st.number_input(
+                "Teto Máximo de Jogos:",
+                min_value=1,
+                max_value=2000000,
+                value=5000,
+                step=500
+            )
+        else:
+            teto_apostas = None
+            st.info("ℹ️ Teto desativado: Todas as combinações válidas serão calculadas.")
+
+    placeholder_metricas = st.empty()
+    barra_progresso = st.progress(0, text="Pronto para processar...")
 
     pode_processar = len(st.session_state.pool_trabalho) >= 6
 
-    if st.button("🚀 Gerar e Filtrar Apostas com a Configuração Ativa", use_container_width=True, disabled=not pode_processar, type="primary"):
-        if not primos_sel or not par_sel or not moldura_sel:
-            st.error("Selecione os parâmetros de Primos, Pares e Moldura.")
-        else:
-            with st.status("🛠️ Processando Motor Combinatório...", expanded=True) as status_box:
-                t0 = time.time()
-                resultados = executar_varredura_pool(
-                    st.session_state.pool_trabalho,
-                    config_total,
-                    barra_progresso,
-                    status_box,
-                    placeholder_metricas,
-                    teto_max=teto_apostas
-                )
-                t_fim = time.time() - t0
-                st.session_state.jogos_aprovados = resultados
-                total_gerado = len(resultados)
+    col_btn_gen, col_btn_raw = st.columns(2)
+    with col_btn_gen:
+        if st.button("🚀 Gerar e Filtrar Apostas com a Configuração Ativa", use_container_width=True, disabled=not pode_processar, type="primary"):
+            if not primos_sel or not par_sel or not moldura_sel:
+                st.error("Selecione os parâmetros de Primos, Pares e Moldura.")
+            else:
+                with st.status("🛠️ Processando Motor Combinatório...", expanded=True) as status_box:
+                    t0 = time.time()
+                    resultados = executar_varredura_pool(
+                        st.session_state.pool_trabalho,
+                        config_total,
+                        barra_progresso,
+                        status_box,
+                        placeholder_metricas,
+                        teto_max=teto_apostas
+                    )
+                    t_fim = time.time() - t0
+                    st.session_state.jogos_aprovados = resultados
+                    total_gerado = len(resultados)
 
-                if total_gerado > 0:
-                    status_box.update(
-                        label=f"✅ Sucesso! {total_gerado:,} aposta(s) aprovada(s) em {t_fim:.2f}s.",
-                        state="complete",
-                        expanded=False
-                    )
-                else:
-                    status_box.update(
-                        label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu aos filtros selecionados.",
-                        state="error",
-                        expanded=True
-                    )
+                    if total_gerado > 0:
+                        status_box.update(
+                            label=f"✅ Sucesso! {total_gerado:,} aposta(s) aprovada(s) em {t_fim:.2f}s.",
+                            state="complete",
+                            expanded=False
+                        )
+                    else:
+                        status_box.update(
+                            label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu aos filtros selecionados.",
+                            state="error",
+                            expanded=True
+                        )
+
+    with col_btn_raw:
+        k_pool = len(st.session_state.pool_trabalho)
+        comb_totais_pool = math.comb(k_pool, 6) if k_pool >= 6 else 0
+        if st.button(f"📦 Exportar Pool Bruto Completo ({comb_totais_pool:,} Jogos)", use_container_width=True, disabled=not pode_processar):
+            with st.spinner("Gerando arquivo do pool bruto..."):
+                dezenas_cands = sorted(list(st.session_state.pool_trabalho))
+                buffer_txt = io.StringIO()
+                for c in combinations(dezenas_cands, 6):
+                    c_ord = sorted(c)
+                    buffer_txt.write(" ".join([f"{n:02d}" for n in c_ord]) + "\n")
+                st.session_state["raw_pool_file"] = buffer_txt.getvalue()
+                st.success(f"Pool bruto de {comb_totais_pool:,} combinações gerado na memória!")
+
+    if "raw_pool_file" in st.session_state:
+        st.download_button(
+            "💾 Baixar Arquivo do Pool Bruto (.TXT)",
+            data=st.session_state["raw_pool_file"],
+            file_name=f"mega60_pool_bruto_{len(st.session_state.pool_trabalho)}dezenas.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
 
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais prontas.")
-        txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
+        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais geradas (ordenadas do menor para o maior).")
+        txt_saida = "\n".join([" ".join([f"{n:02d}" for n in sorted(j)]) for j in st.session_state.jogos_aprovados])
 
         c_d1, c_d2 = st.columns([3, 1])
         with c_d1:
@@ -1142,10 +1171,12 @@ with tab_config:
 # ==============================================================================
 with tab_volante:
     st.subheader("Dissecação da Cartela Oficial")
-    if st.session_state.jogos_aprovados:
-        total_jogos = len(st.session_state.jogos_aprovados)
+    jogos_exibir = st.session_state.jogos_aprovados or st.session_state.jogos_upload
+
+    if jogos_exibir:
+        total_jogos = len(jogos_exibir)
         sel_idx = st.slider("Escolha a aposta para inspecionar:", 1, total_jogos, 1) if total_jogos > 1 else 1
-        jogo_ativo = st.session_state.jogos_aprovados[sel_idx - 1]
+        jogo_ativo = sorted(jogos_exibir[sel_idx - 1])
         marcadas = set(jogo_ativo)
 
         c_v1, c_v2 = st.columns([1, 1])
@@ -1189,13 +1220,15 @@ with tab_volante:
                 st.divider()
                 st.markdown(f"**Pares/Ímpares:** `{pa}P / {6-pa}I` | **Primos:** `{pr}` | **Moldura:** `{mo}` | **Soma:** `{sum(jogo_ativo)}`")
     else:
-        st.info("Gere apostas na aba de Filtros para visualizá-las no volante oficial.")
+        st.info("Gere apostas ou carregue um arquivo para visualizá-las no volante oficial.")
 
 # ==============================================================================
-# ABA 4: UPLOAD & CONFERÊNCIA
+# ABA 4: UPLOAD & FILTRAGEM SUCESSIVA (PIPELINE)
 # ==============================================================================
 with tab_upload:
-    st.subheader("📥 Upload, Auditoria & Conferência de Resultados")
+    st.subheader("📥 Upload, Filtragem Sucessiva & Conferência")
+    st.markdown("Faça upload de uma lista de apostas e aplique filtros estruturais em lote para refinar seu fechamento.")
+
     arquivo_enviado = st.file_uploader("Carregue seu arquivo de apostas (.txt ou .csv):", type=["txt", "csv"])
 
     if arquivo_enviado is not None:
@@ -1208,12 +1241,43 @@ with tab_upload:
     if st.session_state.jogos_upload:
         jogos_up = st.session_state.jogos_upload
         total_up = len(jogos_up)
-        st.success(f"✅ **Arquivo Ativo:** **{total_up:,} apostas oficiais** carregadas.")
+        st.success(f"✅ **Arquivo Carregado:** **{total_up:,} apostas oficiais** prontas em memória.")
+
+        # SEÇÃO DE RE-FILTRAGEM DO ARQUIVO CARREGADO
+        with st.container(border=True):
+            st.markdown("#### ⚡ Filtrar Arquivo Carregado pelos Filtros da Aba 2")
+            st.caption("Passe o lote carregado pelo pente-fino das regras configuradas atualmente (Linhas, Colunas, Diagonais, Soma, Primos, Moldura e Pares).")
+
+            c_flt1, c_flt2 = st.columns([2, 1])
+            with c_flt1:
+                if st.button("🔍 Aplicar Filtros Ativos no Arquivo Carregado", type="primary", use_container_width=True):
+                    with st.spinner("Filtrando apostas carregadas..."):
+                        t_ini_flt = time.time()
+                        aprovados_do_arquivo = [
+                            sorted(j) for j in jogos_up if validar_aposta_final_6(sorted(j), config_total)
+                        ]
+                        t_fim_flt = time.time() - t_ini_flt
+                        st.session_state.jogos_filtrados_upload = aprovados_do_arquivo
+                        st.success(f"Concluído em {t_fim_flt:.2f}s! {len(aprovados_do_arquivo):,} de {total_up:,} apostas passaram nos filtros.")
+
+            if st.session_state.jogos_filtrados_upload:
+                qtd_flt = len(st.session_state.jogos_filtrados_upload)
+                txt_flt = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_filtrados_upload])
+                with c_flt2:
+                    st.download_button(
+                        f"💾 Baixar Lote Filtrado ({qtd_flt:,} Jogos)",
+                        data=txt_flt,
+                        file_name=f"mega60_lote_filtrado_{qtd_flt}.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+
+        st.divider()
 
         col_diag_left, col_conf_right = st.columns([1, 1], gap="large")
 
         with col_diag_left:
-            st.markdown("### 📊 Diagnóstico das Apostas")
+            st.markdown("### 📊 Diagnóstico das Apostas Carregadas")
             cnt_nums = Counter()
             somas = []
             for j in jogos_up:
@@ -1226,7 +1290,7 @@ with tab_upload:
             m3.metric("Mais Frequente", f"{cnt_nums.most_common(1)[0][0]:02d}")
 
             st.markdown("#### 🔥 Frequência na Matriz 6x10")
-            v_min, v_max = min(cnt_nums.values()), max(cnt_nums.values())
+            v_min, v_max = (min(cnt_nums.values()) if cnt_nums else 0), (max(cnt_nums.values()) if cnt_nums else 1)
             delta_v = max(1, v_max - v_min)
             celulas_up_heat = ""
             for r in range(6):
@@ -1244,7 +1308,7 @@ with tab_upload:
         with col_conf_right:
             st.markdown("### 🎯 Conferência de Resultados")
             ult_sorteio = st.session_state.historico[-1] if st.session_state.historico else [4, 12, 18, 30, 35, 54]
-            txt_padrao = " ".join([f"{n:02d}" for n in ult_sorteio])
+            txt_padrao = " ".join([f"{n:02d}" for n in sorted(ult_sorteio)])
 
             modo_origem = st.radio("Origem do Sorteio:", ["Último Sorteio Oficial", "Digitar Manualmente"], horizontal=True)
             if modo_origem == "Último Sorteio Oficial":
@@ -1258,7 +1322,8 @@ with tab_upload:
                 st.error("Informe exatamente 6 dezenas distintas entre 01 e 60 para conferir.")
             else:
                 render_cartao_sorteio_html(dezenas_conf, titulo="CARTÃO DO SORTEIO CONFERIDO")
-                relatorio_conf, placar_conf = conferir_apostas_contra_sorteio(jogos_up, dezenas_conf)
+                base_conferir = st.session_state.jogos_filtrados_upload or jogos_up
+                relatorio_conf, placar_conf = conferir_apostas_contra_sorteio(base_conferir, dezenas_conf)
 
                 c_s, c_q, c_qd, c_t = st.columns(4)
                 c_s.metric("Sena (6)", f"{len(placar_conf[6])}")
@@ -1301,7 +1366,7 @@ with tab_upload:
                         titulo=f"Volante: Aposta #{item_ativo['num_aposta']:04d} ({item_ativo['qtd_acertos']} Acertos)"
                     )
     else:
-        st.info("Envie um arquivo de apostas no topo da página para conferir seus acertos.")
+        st.info("Envie um arquivo de apostas no topo da página para iniciar a filtragem em lote e conferência.")
 
 # ==============================================================================
 # ABA 5: HISTÓRICO & API CAIXA
@@ -1344,4 +1409,4 @@ with tab_historico:
 
     with st.expander("Ver Concursos Armazenados na Sessão"):
         for i, sorteio in enumerate(reversed(st.session_state.historico), start=1):
-            st.write(f"**Concurso recente #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorteio])}`")
+            st.write(f"**Concurso recente #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorted(sorteio)])}`")
