@@ -19,6 +19,101 @@ st.set_page_config(
 )
 
 # ==============================================================================
+# ESTILIZAÇÃO CSS: FONTE MAIOR, TUDO PRETO E ALTO CONTRASTE (SEM CINZA)
+# ==============================================================================
+st.markdown("""
+<style>
+    /* Forçar texto preto em todos os elementos principais e aumentar fontes */
+    html, body, [class*="css"], .stMarkdown, p, span, label, div {
+        color: #000000 !important;
+        font-weight: 600;
+    }
+    
+    h1 {
+        font-size: 2.2rem !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+    }
+    h2 {
+        font-size: 1.8rem !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+    }
+    h3 {
+        font-size: 1.5rem !important;
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+    h4 {
+        font-size: 1.25rem !important;
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+
+    /* Subtítulos e Captions sem cinza */
+    .stCaption, [data-testid="stCaptionContainer"] {
+        color: #000000 !important;
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+    }
+
+    /* Botões: Texto maior, preto e bordas fortes */
+    .stButton > button {
+        color: #000000 !important;
+        font-size: 1.05rem !important;
+        font-weight: 900 !important;
+        border: 2px solid #000000 !important;
+    }
+    
+    /* Botões primários com contraste nítido */
+    .stButton > button[kind="primary"] {
+        background-color: #22c55e !important;
+        color: #000000 !important;
+        border: 2px solid #000000 !important;
+    }
+
+    /* Tabs maiores */
+    button[data-baseweb="tab"] {
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
+        color: #000000 !important;
+    }
+
+    /* Inputs, Selectboxes e Sliders */
+    .stSelectbox label, .stMultiSelect label, .stSlider label, .stTextInput label, .stTextArea label {
+        font-size: 1.1rem !important;
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+
+    /* Métricas */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 1.05rem !important;
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+
+    /* Alertas e caixas de texto */
+    .stAlert p {
+        font-size: 1.1rem !important;
+        color: #000000 !important;
+        font-weight: 800 !important;
+    }
+    
+    code {
+        color: #000000 !important;
+        font-weight: 900 !important;
+        font-size: 1.05rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
 # CONSTANTES E ESTRUTURA DA MATRIZ 6x10
 # ==============================================================================
 TOTAL_NUMS = 60
@@ -160,16 +255,10 @@ def calcular_metricas_elliott(historico):
 def extrair_analise_elite(dados_calor):
     ranking = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
     
-    # Melhores Primos (Top 5)
     melhores_primos = [x["numero"] for x in ranking if x["is_primo"]][:5]
-    
-    # 3 Melhores Pares
     melhores_pares = [x["numero"] for x in ranking if x["is_par"]][:3]
-    
-    # Melhores Ímpares (Top 5)
     melhores_impares = [x["numero"] for x in ranking if not x["is_par"]][:5]
     
-    # Ranking de Diagonais por Score Agregado
     dc_scores = {d: 0.0 for d in range(10)}
     dd_scores = {d: 0.0 for d in range(10)}
     for n, val in dados_calor.items():
@@ -179,7 +268,6 @@ def extrair_analise_elite(dados_calor):
     melhores_dc = sorted(dc_scores.keys(), key=lambda d: dc_scores[d], reverse=True)[:3]
     melhores_dd = sorted(dd_scores.keys(), key=lambda d: dd_scores[d], reverse=True)[:3]
     
-    # Pool Consolidado das Elites (sem duplicatas, ordenado)
     pool_elite = sorted(list(set(melhores_primos) | set(melhores_pares) | set(melhores_impares)))
     
     return {
@@ -401,10 +489,9 @@ def extrair_filtros_multiconcursos(lista_sorteios, modo="preciso"):
     }
 
 # ==============================================================================
-# MOTOR COMBINATÓRIO OTIMIZADO
+# MOTOR COMBINATÓRIO
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
-    # jogo já é uma tupla ordenada do menor para o maior
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
     if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
         return False
@@ -490,7 +577,6 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
     testadas = 0
     t_ultimo_update = 0.0
 
-    # combinations em dezenas_candidatas já gera jogos rigorosamente ordenados do menor para o maior
     for comb in combinations(dezenas_candidatas, 6):
         testadas += 1
 
@@ -557,17 +643,17 @@ def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
 
 def render_cartao_sorteio_html(dezenas, titulo="CARTÃO OFICIAL DO SORTEIO"):
     bolas_html = "".join([
-        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;"
-        f"background:linear-gradient(135deg,#eab308,#ca8a04);color:#ffffff;font-weight:900;font-size:15px;"
-        f"border-radius:50%;margin:0 4px;box-shadow:0 3px 6px rgba(202,138,4,0.35);border:2px solid #a16207;"
+        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;"
+        f"background:#eab308;color:#000000;font-weight:900;font-size:18px;"
+        f"border-radius:50%;margin:0 4px;border:2px solid #000000;"
         f"font-family:monospace;'>{n:02d}</span>"
         for n in dezenas
     ])
     st.markdown(
         f"""
-        <div style="background:linear-gradient(135deg,#fefce8,#fef08a);border:2px solid #eab308;border-radius:12px;padding:12px;margin:8px 0;text-align:center;">
-            <div style="font-weight:900;color:#854d0e;font-size:12px;margin-bottom:6px;text-transform:uppercase;">🏆 {titulo}</div>
-            <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:4px;">{bolas_html}</div>
+        <div style="background:#fef08a;border:3px solid #000000;border-radius:12px;padding:14px;margin:10px 0;text-align:center;">
+            <div style="font-weight:900;color:#000000;font-size:16px;margin-bottom:8px;text-transform:uppercase;">🏆 {titulo}</div>
+            <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px;">{bolas_html}</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -581,29 +667,29 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
         for c in range(10):
             n = r * 10 + c + 1
             if n in jogo_set and n in sorteio_set:
-                celulas += f'<div style="width:34px;height:34px;background:#16a34a;color:#ffffff;font-weight:900;border:2px solid #0f5132;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}<span style="font-size:8px;line-height:6px;">★</span></div>'
+                celulas += f'<div style="width:38px;height:38px;background:#22c55e;color:#000000;font-weight:900;border:2px solid #000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}<span style="font-size:10px;line-height:8px;color:#000000;">★</span></div>'
             elif n in jogo_set:
-                celulas += f'<div style="width:34px;height:34px;background:#0284c7;color:#ffffff;font-weight:800;border:1px solid #0369a1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
+                celulas += f'<div style="width:38px;height:38px;background:#38bdf8;color:#000000;font-weight:900;border:2px solid #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
             elif n in sorteio_set:
-                celulas += f'<div style="width:34px;height:34px;background:#fef08a;color:#854d0e;font-weight:800;border:2px dashed #ca8a04;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
+                celulas += f'<div style="width:38px;height:38px;background:#fde047;color:#000000;font-weight:900;border:2px dashed #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
             else:
-                bg = "#f1f5f9" if n in MOLDURA_SET else "#ffffff"
-                celulas += f'<div style="width:34px;height:34px;background:{bg};color:#94a3b8;border:1px solid #e2e8f0;font-weight:600;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;">{n:02d}</div>'
+                bg = "#e2e8f0" if n in MOLDURA_SET else "#ffffff"
+                celulas += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border:1px solid #000000;font-weight:800;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
 
     html = f"""
     <!DOCTYPE html><html><head><meta charset="utf-8">
     <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
-    .box{{background:#fff;border:2px solid #cbd5e1;border-radius:10px;padding:10px;width:fit-content;}}
-    .grid{{display:grid;grid-template-columns:repeat(10,34px);gap:4px;}}</style></head><body>
-    <div class="box"><div style="font-weight:800;font-size:12px;margin-bottom:8px;color:#0f172a;text-align:center;">{titulo}</div>
+    .box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
+    .grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body>
+    <div class="box"><div style="font-weight:900;font-size:15px;margin-bottom:10px;color:#000000;text-align:center;">{titulo}</div>
     <div class="grid">{celulas}</div>
-    <div style="margin-top:8px;display:flex;justify-content:center;gap:10px;font-size:10px;font-weight:700;">
-        <span style="color:#16a34a;">★ Acerto</span>
-        <span style="color:#0284c7;">■ Jogado</span>
-        <span style="color:#ca8a04;">□ Sorteado</span>
+    <div style="margin-top:10px;display:flex;justify-content:center;gap:12px;font-size:12px;font-weight:900;color:#000000;">
+        <span style="background:#22c55e;padding:2px 8px;border:1px solid #000000;border-radius:4px;">★ Acerto</span>
+        <span style="background:#38bdf8;padding:2px 8px;border:1px solid #000000;border-radius:4px;">■ Jogado</span>
+        <span style="background:#fde047;padding:2px 8px;border:1px solid #000000;border-radius:4px;">□ Sorteado</span>
     </div></div></body></html>
     """
-    components.html(html, height=330, scrolling=False)
+    components.html(html, height=360, scrolling=False)
 
 # ==============================================================================
 # INICIALIZAÇÃO DE ESTADO
@@ -681,12 +767,12 @@ delta_sc = max(0.1, max_sc - min_sc)
 def obter_estilo_calor(score):
     norm = (score - min_sc) / delta_sc
     if norm >= 0.70:
-        return {"cor_bg": "#fee2e2", "cor_texto": "#991b1b", "borda": "#ef4444", "icone": "🔥"}
+        return {"cor_bg": "#fecaca", "cor_texto": "#000000", "borda": "#000000", "icone": "🔥"}
     elif norm >= 0.45:
-        return {"cor_bg": "#ffedd5", "cor_texto": "#9a3412", "borda": "#f97316", "icone": "☀️"}
+        return {"cor_bg": "#fed7aa", "cor_texto": "#000000", "borda": "#000000", "icone": "☀️"}
     elif norm >= 0.25:
-        return {"cor_bg": "#fef9c3", "cor_texto": "#854d0e", "borda": "#eab308", "icone": "🌤️"}
-    return {"cor_bg": "#f1f5f9", "cor_texto": "#475569", "borda": "#94a3b8", "icone": "❄️"}
+        return {"cor_bg": "#fef08a", "cor_texto": "#000000", "borda": "#000000", "icone": "🌤️"}
+    return {"cor_bg": "#e2e8f0", "cor_texto": "#000000", "borda": "#000000", "icone": "❄️"}
 
 # ==============================================================================
 # INTERFACE PRINCIPAL
@@ -703,47 +789,45 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 ])
 
 # ==============================================================================
-# ABA 1: CARTELA TÉRMICA DE ELLIOTT & PAINEL DE ELITE
+# ABA 1: CARTELA TÉRMICA & PAINEL DE ELITE (LETRAS GRANDES E PRETO FORTE)
 # ==============================================================================
 with tab_cartela:
-    # -------------------------------------------------------------
-    # SEÇÃO NOVA: MELHORES NÚMEROS E CONDICIONANTES SEPARADAS
-    # -------------------------------------------------------------
     with st.container(border=True):
         st.markdown("### 🏆 Raio-X de Elite: Melhores Primos, Pares, Ímpares e Diagonais")
-        st.caption("Estatísticas calculadas pelo Motor Térmico de Ondas de Elliott sobre os concursos ativos.")
+        st.markdown("**Estatísticas calculadas pelo Motor Térmico de Ondas de Elliott sobre os concursos ativos.**")
 
         c_el1, c_el2, c_el3, c_el4 = st.columns(4)
 
         with c_el1:
             st.markdown("#### 💎 Melhores Primos")
-            p_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["primos"]])
-            st.markdown(p_txt)
+            p_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["primos"]])
+            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{p_txt}</div>", unsafe_allow_html=True)
 
         with c_el2:
             st.markdown("#### ⚖️ 3 Melhores Pares")
-            pa_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["pares"]])
-            st.markdown(pa_txt)
+            pa_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["pares"]])
+            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{pa_txt}</div>", unsafe_allow_html=True)
 
         with c_el3:
             st.markdown("#### ⚡ Melhores Ímpares")
-            i_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["impares"]])
-            st.markdown(i_txt)
+            i_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["impares"]])
+            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{i_txt}</div>", unsafe_allow_html=True)
 
         with c_el4:
             st.markdown("#### 📐 Melhores Diagonais")
             dc_txt = ", ".join([f"DC{d+1:02d}" for d in analise_elite["dc"]])
             dd_txt = ", ".join([f"DD{d+1:02d}" for d in analise_elite["dd"]])
-            st.markdown(f"**Crescentes (/):** `{dc_txt}`")
-            st.markdown(f"**Decrescentes (\\):** `{dd_txt}`")
+            st.markdown(f"<div style='font-size:1.1rem;color:#000000;font-weight:900;'>Crescentes (/): {dc_txt}<br>Decrescentes (\\): {dd_txt}</div>", unsafe_allow_html=True)
 
         st.divider()
 
         pool_elite_ordenado = analise_elite["pool_elite"]
         dezenas_elite_txt = " - ".join([f"{n:02d}" for n in pool_elite_ordenado])
         st.markdown(
-            f"🎯 **Pool Consolidado das Elites ({len(pool_elite_ordenado)} dezenas agrupadas):** "
-            f"<code style='color:#15803d;font-size:13px;font-weight:bold;'>{dezenas_elite_txt}</code>",
+            f"<div style='font-size:1.25rem;color:#000000;font-weight:900;padding:8px 0;'>"
+            f"🎯 Pool Consolidado das Elites ({len(pool_elite_ordenado)} dezenas agrupadas):<br>"
+            f"<span style='background:#bbf7d0;padding:4px 10px;border:2px solid #000000;border-radius:6px;display:inline-block;margin-top:6px;'>"
+            f"{dezenas_elite_txt}</span></div>",
             unsafe_allow_html=True
         )
 
@@ -763,11 +847,8 @@ with tab_cartela:
 
     st.write("")
 
-    # -------------------------------------------------------------
-    # CARTELA VIRTUAL 6x10
-    # -------------------------------------------------------------
     st.subheader("🎟️ Cartela Interativa de 60 Números (Matriz 6x10)")
-    st.markdown("Dezenas identificadas nas **Elites** recebem a estrela `⭐`. Clique para ativar/desativar dezenas no pool:")
+    st.markdown("**Dezenas nas Elites recebem a estrela ⭐. Clique para marcar/desmarcar:**")
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
@@ -779,7 +860,7 @@ with tab_cartela:
             st.session_state.pool_trabalho = {item["numero"] for item in ranking_elliott[:20]}
             st.rerun()
     with c_b3:
-        if st.button("⚡ +9 Dezenas Fibonacci", use_container_width=True):
+        if st.button("⚡ +9 Fibonacci", use_container_width=True):
             st.session_state.pool_trabalho = set(st.session_state.pool_trabalho) | FIBONACCI_MEGASENA
             st.rerun()
     with c_b4:
@@ -819,29 +900,26 @@ with tab_cartela:
     qtd_sel = len(st.session_state.pool_trabalho)
     with col_inf1:
         st.markdown(
-            "**Legenda da Matriz:** &nbsp; "
-            "⭐ = Dezena Elite &nbsp;|&nbsp; "
-            "<span style='color:#dc2626;font-weight:700;'>🔥 Onda 3</span> &nbsp;|&nbsp; "
-            "<span style='color:#ea580c;font-weight:700;'>☀️ Retração Fib</span> &nbsp;|&nbsp; "
-            "<span style='color:#ca8a04;font-weight:700;'>🌤️ Acumulação</span> &nbsp;|&nbsp; "
-            "<span style='color:#64748b;font-weight:700;'>❄️ Repouso</span>",
+            "<div style='font-size:1.15rem;font-weight:900;color:#000000;margin-bottom:8px;'>"
+            "LEGENDA: ⭐ Elite &nbsp;|&nbsp; 🔥 Onda 3 &nbsp;|&nbsp; ☀️ Retração Fib &nbsp;|&nbsp; 🌤️ Acumulação &nbsp;|&nbsp; ❄️ Repouso"
+            "</div>",
             unsafe_allow_html=True
         )
         dezenas_txt = " - ".join([f"{n:02d}" for n in sorted(list(st.session_state.pool_trabalho))])
-        st.success(f"✅ **Dezenas Ativas ({qtd_sel}):** `{dezenas_txt if dezenas_txt else 'Nenhuma'}`")
+        st.success(f"✅ Dezenas Ativas ({qtd_sel}): {dezenas_txt if dezenas_txt else 'Nenhuma'}")
     with col_inf2:
         total_comb = math.comb(qtd_sel, 6) if qtd_sel >= 6 else 0
         st.metric("Dezenas Selecionadas", f"{qtd_sel} / 60")
-        st.caption(f"Espaço Bruto: **{total_comb:,}** jogos")
+        st.markdown(f"<div style='font-size:1.1rem;font-weight:900;color:#000000;'>Espaço Bruto: {total_comb:,} jogos</div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# ABA 2: CONFIGURAÇÃO DOS FILTROS & MOTOR COMBINATÓRIO ILIMITADO
+# ABA 2: CONFIGURAÇÃO DOS FILTROS & MOTOR COMBINATÓRIO
 # ==============================================================================
 with tab_config:
     st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
 
     tipo_reverso = st.radio(
-        "Selecione a Rotina de Engenharia Reversa Desejada:",
+        "Selecione a Rotina de Engenharia Reversa:",
         [
             "🏛️ Rotina 1: Histórica Multiconcursos (Concursos Anteriores em Lote)",
             "⚡ Rotina 2: Amostra Personalizada (Digitar 6 a 60 Dezenas)"
@@ -852,10 +930,7 @@ with tab_config:
     if tipo_reverso.startswith("🏛️ Rotina 1"):
         with st.container(border=True):
             st.markdown("#### 🏛️ Engenharia Reversa Multiconcursos: Otimização Histórica")
-            st.caption(
-                "Escolha a quantidade de concursos anteriores recentes para sintetizar o **Melhor Filtro Combinado**. "
-                "O motor sintetiza a moldura que cobriu 100% desses concursos."
-            )
+            st.markdown("**Escolha a quantidade de concursos anteriores recentes para sintetizar o Melhor Filtro Combinado.**")
 
             total_disp = len(st.session_state.historico)
             col_m1, col_m2, col_m3 = st.columns([1.5, 1.8, 1.7])
@@ -875,8 +950,7 @@ with tab_config:
                 )
                 carregar_pool_multi = st.checkbox(
                     "Carregar Dezenas Desses Sorteios no Pool",
-                    value=True,
-                    help="Adiciona na cartela todas as dezenas que foram sorteadas nesse período."
+                    value=True
                 )
             with col_m3:
                 tolerancia_multi = st.selectbox(
@@ -925,7 +999,7 @@ with tab_config:
     else:
         with st.container(border=True):
             st.markdown("#### ⚡ Engenharia Reversa por Dezenas Digitadas (6 a 60 Números)")
-            st.caption("Cole de 6 a 60 dezenas avulsas. O motor sintetiza a distribuição ideal e envia direto ao painel.")
+            st.markdown("**Cole de 6 a 60 dezenas avulsas. O motor sintetiza a distribuição ideal e envia direto ao painel.**")
 
             col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
             with col_input_res:
@@ -997,7 +1071,7 @@ with tab_config:
             with c_btn_rev2:
                 st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
 
-    # Linha de Trabalho
+    # Linha de Trabalho com bordas fortes e texto preto
     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
     if st.session_state.linha_trabalho_reverso:
         lt = st.session_state.linha_trabalho_reverso
@@ -1008,7 +1082,7 @@ with tab_config:
         if is_multi:
             detalhes_audit = (
                 f"• <strong>Base de Auditoria:</strong> <strong>{lt['qtd_concursos']} concursos recentes</strong> analisados.<br>"
-                f"• <strong>Dezenas Abrangidas no Histórico ({lt['total_dezenas_unicas']}):</strong> <span style='font-family:monospace;color:#166534;font-weight:700;'>{dezenas_formatadas}</span><br>"
+                f"• <strong>Dezenas Abrangidas no Histórico ({lt['total_dezenas_unicas']}):</strong> <span style='font-family:monospace;color:#000000;font-weight:900;'>{dezenas_formatadas}</span><br>"
                 f"• <strong>Faixa de Soma Observada:</strong> <code>{lt['audit']['soma_min_real']}</code> até <code>{lt['audit']['soma_max_real']}</code> | "
                 f"<strong>Primos Reais:</strong> <code>{lt['audit']['primos_reais']}</code> | "
                 f"<strong>Moldura Real:</strong> <code>{lt['audit']['moldura_reais']}</code>"
@@ -1016,22 +1090,22 @@ with tab_config:
         else:
             detalhes_audit = (
                 f"• <strong>Volume Analisado:</strong> <strong>{lt['qtd_dezenas']} dezenas</strong> computadas em linhas, colunas e diagonais.<br>"
-                f"• <strong>Dezenas Auditadas:</strong> <span style='font-family:monospace;color:#166534;font-weight:700;'>{dezenas_formatadas}</span>"
+                f"• <strong>Dezenas Auditadas:</strong> <span style='font-family:monospace;color:#000000;font-weight:900;'>{dezenas_formatadas}</span>"
             )
 
         st.markdown(
             f"""
-            <div style="background:#f0fdf4;border:1px solid #86efac;border-left:6px solid #16a34a;border-radius:8px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.05);margin-bottom:15px;">
+            <div style="background:#dcfce7;border:2px solid #000000;border-left:8px solid #000000;border-radius:8px;padding:14px;margin-bottom:15px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <span style="font-weight:900;color:#15803d;font-size:13px;letter-spacing:0.5px;">
+                    <span style="font-weight:900;color:#000000;font-size:15px;">
                         🟢 LINHA DE TRABALHO: {lt['status']} ({lt.get('tipo', 'OPERACIONAL')})
                     </span>
-                    <span style="font-size:11px;color:#166534;font-family:monospace;background:#dcfce7;border:1px solid #bbf7d0;padding:2px 8px;border-radius:4px;font-weight:700;">
+                    <span style="font-size:13px;color:#000000;font-family:monospace;background:#bbf7d0;border:1px solid #000000;padding:3px 10px;border-radius:4px;font-weight:900;">
                         🕒 {lt['timestamp']}
                     </span>
                 </div>
-                <div style="margin-top:8px;font-size:12px;color:#14532d;line-height:1.6;">
-                    • <strong>Filtro Ativo:</strong> <code style="color:#0f5132;background:#dcfce7;padding:1px 6px;border-radius:3px;font-weight:bold;">{lt['nome']}</code> ({lt['modo']})<br>
+                <div style="margin-top:10px;font-size:14px;color:#000000;line-height:1.7;font-weight:700;">
+                    • <strong>Filtro Ativo:</strong> <code style="color:#000000;background:#ffffff;border:1px solid #000000;padding:2px 8px;border-radius:4px;font-weight:900;">{lt['nome']}</code> ({lt['modo']})<br>
                     {detalhes_audit}<br>
                     • <strong>Sincronização:</strong> Gravado no catálogo de predefinições ({pool_info}).
                 </div>
@@ -1046,7 +1120,7 @@ with tab_config:
         col_puxar, col_gravar = st.columns(2)
 
         with col_puxar:
-            st.markdown("**📥 Carregar Filtro Salvo:**")
+            st.markdown("**Carregar Filtro Salvo:**")
             lista_nomes = list(st.session_state.presets_filtros.keys())
             filtro_escolhido = st.selectbox("Selecione o filtro:", lista_nomes, index=0, key="select_preset_load")
 
@@ -1067,7 +1141,7 @@ with tab_config:
                 )
 
         with col_gravar:
-            st.markdown("**💾 Gravar Configuração Manual Atual:**")
+            st.markdown("**Gravar Configuração Manual Atual:**")
             nome_novo_filtro = st.text_input("Nome da predefinição manual:", placeholder="Ex: Filtro Personalizado", key="input_nome_filtro_manual")
 
             c_grv1, c_grv2 = st.columns(2)
@@ -1174,14 +1248,12 @@ with tab_config:
 
     st.divider()
 
-    # CONTROLE DE GERAÇÃO: OPÇÃO SEM LIMITE (TOTAL DE JOGOS)
     st.markdown("#### ⚙️ Controle de Execução e Teto de Combinações")
     c_ctrl1, c_ctrl2 = st.columns([2, 2])
     with c_ctrl1:
         sem_limite = st.checkbox(
             "♾️ **Sem Limite (Gerar Todas as Combinações Válidas)**",
-            value=True,
-            help="Desativa qualquer teto. O motor vai testar todo o pool e gerar 100% dos jogos que passarem nos filtros."
+            value=True
         )
     with c_ctrl2:
         if not sem_limite:
@@ -1257,7 +1329,7 @@ with tab_config:
 
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais geradas (ordenadas do menor para o maior).")
+        st.success(f"🎯 Total Aprovado: {qtd_aprov:,} apostas oficiais geradas (ordenadas do menor para o maior).")
         txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
 
         c_d1, c_d2 = st.columns([3, 1])
@@ -1292,20 +1364,20 @@ with tab_volante:
                 for c in range(10):
                     n = r * 10 + c + 1
                     if n in marcadas:
-                        celulas += f'<div style="width:34px;height:34px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:2px solid #0f5132;font-weight:800;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;">{n:02d}</div>'
+                        celulas += f'<div style="width:38px;height:38px;background:#22c55e;color:#000000;border:2px solid #000000;font-weight:900;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;">{n:02d}</div>'
                     else:
-                        bg = "#f1f5f9" if n in MOLDURA_SET else "#ffffff"
-                        celulas += f'<div style="width:34px;height:34px;background:{bg};color:#64748b;border:1px solid #cbd5e1;font-weight:600;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:12px;">{n:02d}</div>'
+                        bg = "#e2e8f0" if n in MOLDURA_SET else "#ffffff"
+                        celulas += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border:1px solid #000000;font-weight:800;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;">{n:02d}</div>'
 
             html_cartela = f"""
             <!DOCTYPE html><html><head><meta charset="utf-8">
             <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
-            .box{{background:#fff;border:2px solid #16a34a;border-radius:10px;padding:10px;width:fit-content;}}
-            .grid{{display:grid;grid-template-columns:repeat(10,34px);gap:4px;}}</style></head><body>
-            <div class="box"><div style="font-weight:800;font-size:13px;margin-bottom:8px;color:#15803d;text-align:center;">Jogo #{sel_idx:04d}: {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
+            .box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
+            .grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body>
+            <div class="box"><div style="font-weight:900;font-size:15px;margin-bottom:10px;color:#000000;text-align:center;">Jogo #{sel_idx:04d}: {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
             <div class="grid">{celulas}</div></div></body></html>
             """
-            components.html(html_cartela, height=310, scrolling=False)
+            components.html(html_cartela, height=340, scrolling=False)
 
         with c_v2:
             with st.container(border=True):
@@ -1315,10 +1387,10 @@ with tab_volante:
                 cnt_dc = Counter(PROPS[n]["dc"] + 1 for n in jogo_ativo)
                 cnt_dd = Counter(PROPS[n]["dd"] + 1 for n in jogo_ativo)
 
-                st.markdown("**Linhas:** " + " • ".join([f"L{k}: `{v}x`" for k, v in sorted(cnt_linhas.items())]))
-                st.markdown("**Colunas:** " + " • ".join([f"C{k:02d}: `{v}x`" for k, v in sorted(cnt_colunas.items())]))
-                st.markdown("**Diagonais Cresc.:** " + " • ".join([f"DC{k:02d}: `{v}x`" for k, v in sorted(cnt_dc.items())]))
-                st.markdown("**Diagonais Decresc.:** " + " • ".join([f"DD{k:02d}: `{v}x`" for k, v in sorted(cnt_dd.items())]))
+                st.markdown("**Linhas:** " + " • ".join([f"L{k}: **{v}x**" for k, v in sorted(cnt_linhas.items())]))
+                st.markdown("**Colunas:** " + " • ".join([f"C{k:02d}: **{v}x**" for k, v in sorted(cnt_colunas.items())]))
+                st.markdown("**Diagonais Cresc.:** " + " • ".join([f"DC{k:02d}: **{v}x**" for k, v in sorted(cnt_dc.items())]))
+                st.markdown("**Diagonais Decresc.:** " + " • ".join([f"DD{k:02d}: **{v}x**" for k, v in sorted(cnt_dd.items())]))
 
                 pr = sum(1 for n in jogo_ativo if PROPS[n]["is_primo"])
                 pa = sum(1 for n in jogo_ativo if PROPS[n]["is_par"])
@@ -1329,11 +1401,11 @@ with tab_volante:
         st.info("Gere apostas ou carregue um arquivo para visualizá-las no volante oficial.")
 
 # ==============================================================================
-# ABA 4: UPLOAD & FILTRAGEM SUCESSIVA (PIPELINE)
+# ABA 4: UPLOAD & FILTRAGEM SUCESSIVA
 # ==============================================================================
 with tab_upload:
     st.subheader("📥 Upload, Filtragem Sucessiva & Conferência")
-    st.markdown("Faça upload de uma lista de apostas e aplique filtros estruturais em lote para refinar seu fechamento.")
+    st.markdown("**Faça upload de uma lista de apostas e aplique filtros estruturais em lote para refinar seu fechamento.**")
 
     arquivo_enviado = st.file_uploader("Carregue seu arquivo de apostas (.txt ou .csv):", type=["txt", "csv"])
 
@@ -1347,11 +1419,11 @@ with tab_upload:
     if st.session_state.jogos_upload:
         jogos_up = st.session_state.jogos_upload
         total_up = len(jogos_up)
-        st.success(f"✅ **Arquivo Carregado:** **{total_up:,} apostas oficiais** prontas em memória.")
+        st.success(f"✅ Arquivo Carregado: {total_up:,} apostas oficiais prontas em memória.")
 
         with st.container(border=True):
             st.markdown("#### ⚡ Filtrar Arquivo Carregado pelos Filtros da Aba 2")
-            st.caption("Passe o lote carregado pelo pente-fino das regras configuradas atualmente (Linhas, Colunas, Diagonais, Soma, Primos, Moldura e Pares).")
+            st.markdown("**Passe o lote carregado pelas regras ativas de Linhas, Colunas, Diagonais, Soma, Primos, Moldura e Pares.**")
 
             c_flt1, c_flt2 = st.columns([2, 1])
             with c_flt1:
@@ -1403,12 +1475,11 @@ with tab_upload:
                     n = r * 10 + c + 1
                     freq = cnt_nums[n]
                     ratio = (freq - v_min) / delta_v
-                    bg = "#f8fafc" if freq == 0 else ("#bbf7d0" if ratio < 0.35 else ("#fed7aa" if ratio < 0.70 else "#fca5a5"))
-                    color = "#94a3b8" if freq == 0 else ("#166534" if ratio < 0.35 else ("#9a3412" if ratio < 0.70 else "#991b1b"))
-                    celulas_up_heat += f'<div style="width:34px;height:34px;background:{bg};color:{color};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:1px solid rgba(0,0,0,0.08);box-sizing:border-box;"><span style="font-size:11px;font-weight:900;">{n:02d}</span><span style="font-size:8px;font-weight:700;">{freq}x</span></div>'
+                    bg = "#ffffff" if freq == 0 else ("#bbf7d0" if ratio < 0.35 else ("#fed7aa" if ratio < 0.70 else "#fca5a5"))
+                    celulas_up_heat += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:1px solid #000000;box-sizing:border-box;"><span style="font-size:12px;font-weight:900;">{n:02d}</span><span style="font-size:9px;font-weight:900;">{freq}x</span></div>'
 
-            html_up = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}.box{{background:#fff;border:2px solid #cbd5e1;border-radius:10px;padding:8px;width:fit-content;}}.grid{{display:grid;grid-template-columns:repeat(10,34px);gap:3px;}}</style></head><body><div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>'
-            components.html(html_up, height=270, scrolling=False)
+            html_up = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}.box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:10px;width:fit-content;}}.grid{{display:grid;grid-template-columns:repeat(10,38px);gap:3px;}}</style></head><body><div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>'
+            components.html(html_up, height=290, scrolling=False)
 
         with col_conf_right:
             st.markdown("### 🎯 Conferência de Resultados")
@@ -1438,7 +1509,7 @@ with tab_upload:
 
                 tot_prem = len(placar_conf[6]) + len(placar_conf[5]) + len(placar_conf[4])
                 if tot_prem > 0:
-                    st.success(f"🎉 **{tot_prem} aposta(s) premiada(s)** encontradas no arquivo!")
+                    st.success(f"🎉 {tot_prem} aposta(s) premiada(s) encontradas no arquivo!")
                     jogos_premiados_txt = "\n".join([
                         f"{' '.join([f'{n:02d}' for n in it['jogo']])} | {it['qtd_acertos']} ACERTOS"
                         for it in relatorio_conf if it["qtd_acertos"] >= 4
@@ -1478,7 +1549,7 @@ with tab_upload:
 # ==============================================================================
 with tab_historico:
     st.subheader("Base de Sorteios Oficiais")
-    st.write(f"Concursos ativos em memória: **{len(st.session_state.historico)}** ({st.session_state.origem})")
+    st.markdown(f"**Concursos ativos em memória:** `{len(st.session_state.historico)}` ({st.session_state.origem})")
 
     if st.button("🌐 Sincronizar Histórico com a Caixa Agora", type="primary"):
         with st.spinner("Conectando aos servidores da Caixa..."):
@@ -1514,4 +1585,4 @@ with tab_historico:
 
     with st.expander("Ver Concursos Armazenados na Sessão"):
         for i, sorteio in enumerate(reversed(st.session_state.historico), start=1):
-            st.write(f"**Concurso recente #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorted(sorteio)])}`")
+            st.markdown(f"**Concurso recente #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorted(sorteio)])}`")
