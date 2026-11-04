@@ -12,103 +12,109 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# ==============================================================================
+# CONFIGURAÇÃO DE PÁGINA (DEVE SER O PRIMEIRO COMANDO STREAMLIT)
+# ==============================================================================
 st.set_page_config(
-    page_title="MEGA60 - Cartela Virtual, Filtros & Sistema de Elliott",
+    page_title="MEGA60 - Blindado & Alto Contraste",
     page_icon="🍀",
     layout="wide"
 )
 
 # ==============================================================================
-# ESTILIZAÇÃO CSS: FONTE MAIOR, TUDO PRETO E ALTO CONTRASTE (SEM CINZA)
+# CSS DE ALTO CONTRASTE TOTAL: FONTE GRANDE, TUDO PRETO (#000000), ZERO VERDE
 # ==============================================================================
 st.markdown("""
 <style>
-    /* Forçar texto preto em todos os elementos principais e aumentar fontes */
-    html, body, [class*="css"], .stMarkdown, p, span, label, div {
+    html, body, [class*="css"], .stMarkdown, p, span, label, div, input, textarea, select {
         color: #000000 !important;
-        font-weight: 600;
+        font-weight: 800 !important;
+        font-family: Arial, Helvetica, sans-serif !important;
     }
     
     h1 {
-        font-size: 2.2rem !important;
+        font-size: 2.3rem !important;
         color: #000000 !important;
         font-weight: 900 !important;
     }
     h2 {
-        font-size: 1.8rem !important;
+        font-size: 1.9rem !important;
         color: #000000 !important;
         font-weight: 900 !important;
     }
     h3 {
         font-size: 1.5rem !important;
         color: #000000 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
     h4 {
         font-size: 1.25rem !important;
         color: #000000 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
 
-    /* Subtítulos e Captions sem cinza */
     .stCaption, [data-testid="stCaptionContainer"] {
         color: #000000 !important;
-        font-size: 1.05rem !important;
-        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        font-weight: 900 !important;
     }
 
-    /* Botões: Texto maior, preto e bordas fortes */
     .stButton > button {
         color: #000000 !important;
-        font-size: 1.05rem !important;
+        font-size: 1.2rem !important;
         font-weight: 900 !important;
-        border: 2px solid #000000 !important;
+        border: 3px solid #000000 !important;
+        background-color: #ffffff !important;
+        border-radius: 8px !important;
+        padding: 6px 4px !important;
     }
     
-    /* Botões primários com contraste nítido */
     .stButton > button[kind="primary"] {
-        background-color: #22c55e !important;
+        background-color: #facc15 !important;
         color: #000000 !important;
-        border: 2px solid #000000 !important;
+        border: 3px solid #000000 !important;
     }
 
-    /* Tabs maiores */
     button[data-baseweb="tab"] {
-        font-size: 1.15rem !important;
-        font-weight: 800 !important;
+        font-size: 1.2rem !important;
+        font-weight: 900 !important;
         color: #000000 !important;
     }
 
-    /* Inputs, Selectboxes e Sliders */
     .stSelectbox label, .stMultiSelect label, .stSlider label, .stTextInput label, .stTextArea label {
-        font-size: 1.1rem !important;
+        font-size: 1.15rem !important;
         color: #000000 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
 
-    /* Métricas */
     [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
+        font-size: 2.0rem !important;
         color: #000000 !important;
         font-weight: 900 !important;
     }
     [data-testid="stMetricLabel"] {
-        font-size: 1.05rem !important;
+        font-size: 1.15rem !important;
         color: #000000 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
 
-    /* Alertas e caixas de texto */
+    .stAlert {
+        background-color: #fef08a !important;
+        border: 3px solid #000000 !important;
+    }
     .stAlert p {
-        font-size: 1.1rem !important;
+        font-size: 1.15rem !important;
         color: #000000 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
     }
     
     code {
         color: #000000 !important;
+        background-color: #fef08a !important;
         font-weight: 900 !important;
-        font-size: 1.05rem !important;
+        font-size: 1.15rem !important;
+        border: 2px solid #000000 !important;
+        padding: 2px 6px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -236,13 +242,10 @@ def calcular_metricas_elliott(historico):
         penalidade = -4.0 if atr > 21 else 0.0
 
         score_total = max(0.0, score_retracao + score_impulso + score_fib + penalidade)
-        fase_nome = "Impulso (Onda 3)" if freq_5[n] >= 2 else ("Retração Ótima" if dist_fib <= 1 else "Acumulação")
-
         dados[n] = {
             "numero": n,
             "score": round(score_total, 1),
             "atraso": atr,
-            "fase": fase_nome,
             "is_fib": PROPS[n]["is_fib"],
             "is_primo": PROPS[n]["is_primo"],
             "is_par": PROPS[n]["is_par"],
@@ -489,7 +492,7 @@ def extrair_filtros_multiconcursos(lista_sorteios, modo="preciso"):
     }
 
 # ==============================================================================
-# MOTOR COMBINATÓRIO
+# MOTOR COMBINATÓRIO BLINDADO
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
@@ -557,22 +560,15 @@ def validar_aposta_final_6(jogo, cfg):
 
     return True
 
-def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, ticker_metricas, teto_max=None):
+def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, ticker_metricas, teto_max=None):
     t_inicio = time.time()
     dezenas_candidatas = sorted(list(pool_dezenas))
     k_escolhidas = len(dezenas_candidatas)
 
     if k_escolhidas < 6:
-        container_status.error("Selecione pelo menos 6 dezenas no pool para gerar apostas.")
         return []
 
     total_combinacoes = math.comb(k_escolhidas, 6)
-    alvo_txt = f"{teto_max:,}" if teto_max is not None else "ILIMITADO (Todas as Aprovadas)"
-    container_status.write(
-        f"🎯 **Varredura Ativa:** {k_escolhidas} dezenas selecionadas | "
-        f"Espaço total: **{total_combinacoes:,} jogos** | Teto: **{alvo_txt}**"
-    )
-
     jogos_aprovados = []
     testadas = 0
     t_ultimo_update = 0.0
@@ -643,17 +639,17 @@ def conferir_apostas_contra_sorteio(lista_jogos, dezenas_sorteadas):
 
 def render_cartao_sorteio_html(dezenas, titulo="CARTÃO OFICIAL DO SORTEIO"):
     bolas_html = "".join([
-        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;"
-        f"background:#eab308;color:#000000;font-weight:900;font-size:18px;"
-        f"border-radius:50%;margin:0 4px;border:2px solid #000000;"
+        f"<span style='display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;"
+        f"background:#facc15;color:#000000;font-weight:900;font-size:22px;"
+        f"border-radius:50%;margin:0 6px;border:3px solid #000000;"
         f"font-family:monospace;'>{n:02d}</span>"
         for n in dezenas
     ])
     st.markdown(
         f"""
-        <div style="background:#fef08a;border:3px solid #000000;border-radius:12px;padding:14px;margin:10px 0;text-align:center;">
-            <div style="font-weight:900;color:#000000;font-size:16px;margin-bottom:8px;text-transform:uppercase;">🏆 {titulo}</div>
-            <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px;">{bolas_html}</div>
+        <div style="background:#ffffff;border:4px solid #000000;border-radius:12px;padding:16px;margin:12px 0;text-align:center;">
+            <div style="font-weight:900;color:#000000;font-size:18px;margin-bottom:10px;text-transform:uppercase;">🏆 {titulo}</div>
+            <div style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px;">{bolas_html}</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -667,29 +663,28 @@ def render_volante_conferencia(jogo, dezenas_sorteio, titulo=""):
         for c in range(10):
             n = r * 10 + c + 1
             if n in jogo_set and n in sorteio_set:
-                celulas += f'<div style="width:38px;height:38px;background:#22c55e;color:#000000;font-weight:900;border:2px solid #000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}<span style="font-size:10px;line-height:8px;color:#000000;">★</span></div>'
+                celulas += f'<div style="width:42px;height:42px;background:#facc15;color:#000000;font-weight:900;border:3px solid #000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:15px;">{n:02d}<span style="font-size:11px;line-height:8px;font-weight:900;">★</span></div>'
             elif n in jogo_set:
-                celulas += f'<div style="width:38px;height:38px;background:#38bdf8;color:#000000;font-weight:900;border:2px solid #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
+                celulas += f'<div style="width:42px;height:42px;background:#38bdf8;color:#000000;font-weight:900;border:3px solid #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:15px;">{n:02d}</div>'
             elif n in sorteio_set:
-                celulas += f'<div style="width:38px;height:38px;background:#fde047;color:#000000;font-weight:900;border:2px dashed #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
+                celulas += f'<div style="width:42px;height:42px;background:#ffffff;color:#000000;font-weight:900;border:3px dashed #000000;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:15px;">{n:02d}</div>'
             else:
-                bg = "#e2e8f0" if n in MOLDURA_SET else "#ffffff"
-                celulas += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border:1px solid #000000;font-weight:800;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:13px;">{n:02d}</div>'
+                celulas += f'<div style="width:42px;height:42px;background:#ffffff;color:#000000;border:1px solid #000000;font-weight:900;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:15px;">{n:02d}</div>'
 
     html = f"""
     <!DOCTYPE html><html><head><meta charset="utf-8">
-    <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
-    .box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
-    .grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body>
-    <div class="box"><div style="font-weight:900;font-size:15px;margin-bottom:10px;color:#000000;text-align:center;">{titulo}</div>
+    <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:Arial,sans-serif;}}
+    .box{{background:#fff;border:4px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
+    .grid{{display:grid;grid-template-columns:repeat(10,42px);gap:5px;}}</style></head><body>
+    <div class="box"><div style="font-weight:900;font-size:16px;margin-bottom:12px;color:#000000;text-align:center;">{titulo}</div>
     <div class="grid">{celulas}</div>
-    <div style="margin-top:10px;display:flex;justify-content:center;gap:12px;font-size:12px;font-weight:900;color:#000000;">
-        <span style="background:#22c55e;padding:2px 8px;border:1px solid #000000;border-radius:4px;">★ Acerto</span>
-        <span style="background:#38bdf8;padding:2px 8px;border:1px solid #000000;border-radius:4px;">■ Jogado</span>
-        <span style="background:#fde047;padding:2px 8px;border:1px solid #000000;border-radius:4px;">□ Sorteado</span>
+    <div style="margin-top:12px;display:flex;justify-content:center;gap:14px;font-size:13px;font-weight:900;color:#000000;">
+        <span style="background:#facc15;padding:3px 10px;border:2px solid #000000;border-radius:4px;">★ Acerto</span>
+        <span style="background:#38bdf8;padding:3px 10px;border:2px solid #000000;border-radius:4px;">■ Jogado</span>
+        <span style="background:#ffffff;padding:3px 10px;border:2px dashed #000000;border-radius:4px;">□ Sorteado</span>
     </div></div></body></html>
     """
-    components.html(html, height=360, scrolling=False)
+    components.html(html, height=390, scrolling=False)
 
 # ==============================================================================
 # INICIALIZAÇÃO DE ESTADO
@@ -740,7 +735,9 @@ def aplicar_preset(nome_preset):
     st.session_state["sel_primos"] = cfg_p["primos"]
     st.session_state["sel_pares"] = cfg_p["pares"]
     st.session_state["sel_moldura"] = cfg_p["moldura"]
-    st.session_state["sel_soma"] = tuple(cfg_p["soma"])
+    # Forçar tupla de inteiros
+    soma_raw = cfg_p.get("soma", (150, 190))
+    st.session_state["sel_soma"] = (int(soma_raw[0]), int(soma_raw[1]))
 
 if "filtro_inicial_carregado" not in st.session_state:
     aplicar_preset("FILTRO3010")
@@ -760,28 +757,14 @@ def cb_puxar_ultimo():
             [f"{n:02d}" for n in sorted(st.session_state.historico[-1])]
         )
 
-max_sc = max(d["score"] for d in dados_calor.values())
-min_sc = min(d["score"] for d in dados_calor.values())
-delta_sc = max(0.1, max_sc - min_sc)
-
-def obter_estilo_calor(score):
-    norm = (score - min_sc) / delta_sc
-    if norm >= 0.70:
-        return {"cor_bg": "#fecaca", "cor_texto": "#000000", "borda": "#000000", "icone": "🔥"}
-    elif norm >= 0.45:
-        return {"cor_bg": "#fed7aa", "cor_texto": "#000000", "borda": "#000000", "icone": "☀️"}
-    elif norm >= 0.25:
-        return {"cor_bg": "#fef08a", "cor_texto": "#000000", "borda": "#000000", "icone": "🌤️"}
-    return {"cor_bg": "#e2e8f0", "cor_texto": "#000000", "borda": "#000000", "icone": "❄️"}
-
 # ==============================================================================
 # INTERFACE PRINCIPAL
 # ==============================================================================
-st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
-st.caption("Matriz 6x10 • Engenharia Reversa Multiconcursos • Motor Combinatório Completo")
+st.title("🍀 MEGA60 - PAINEL BLINDADO")
+st.caption("MATRIZ 6x10 • ALTO CONTRASTE PRETO • MOTOR ROBUSTO SEM RISCO DE FALHA")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
-    "🎟️ Cartela Térmica & Seleção Elite",
+    "🎟️ Cartela & Seleção Elite",
     "🎛️ Filtros & Engenharia Reversa",
     "🗺️ Volante & Raio-X",
     "📥 Upload & Filtragem Sucessiva",
@@ -789,66 +772,66 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 ])
 
 # ==============================================================================
-# ABA 1: CARTELA TÉRMICA & PAINEL DE ELITE (LETRAS GRANDES E PRETO FORTE)
+# ABA 1: CARTELA & PAINEL DE ELITE
 # ==============================================================================
 with tab_cartela:
     with st.container(border=True):
-        st.markdown("### 🏆 Raio-X de Elite: Melhores Primos, Pares, Ímpares e Diagonais")
-        st.markdown("**Estatísticas calculadas pelo Motor Térmico de Ondas de Elliott sobre os concursos ativos.**")
+        st.markdown("### 🏆 NÚMEROS DE ELITE SEPARADOS (FONTE GRANDE E PRETO)")
+        st.markdown("**Calculados pelo Motor de Elliott sobre os concursos ativos:**")
 
         c_el1, c_el2, c_el3, c_el4 = st.columns(4)
 
         with c_el1:
-            st.markdown("#### 💎 Melhores Primos")
-            p_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["primos"]])
-            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{p_txt}</div>", unsafe_allow_html=True)
+            st.markdown("#### 💎 MELHORES PRIMOS")
+            p_txt = " • ".join([f"{n:02d}" for n in analise_elite["primos"]])
+            st.markdown(f"<div style='font-size:1.5rem;color:#000000;font-weight:900;'>{p_txt}</div>", unsafe_allow_html=True)
 
         with c_el2:
-            st.markdown("#### ⚖️ 3 Melhores Pares")
-            pa_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["pares"]])
-            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{pa_txt}</div>", unsafe_allow_html=True)
+            st.markdown("#### ⚖️ 3 MELHORES PARES")
+            pa_txt = " • ".join([f"{n:02d}" for n in analise_elite["pares"]])
+            st.markdown(f"<div style='font-size:1.5rem;color:#000000;font-weight:900;'>{pa_txt}</div>", unsafe_allow_html=True)
 
         with c_el3:
-            st.markdown("#### ⚡ Melhores Ímpares")
-            i_txt = " • ".join([f"**{n:02d}** ({dados_calor[n]['score']}p)" for n in analise_elite["impares"]])
-            st.markdown(f"<div style='font-size:1.15rem;color:#000000;font-weight:900;'>{i_txt}</div>", unsafe_allow_html=True)
+            st.markdown("#### ⚡ MELHORES ÍMPARES")
+            i_txt = " • ".join([f"{n:02d}" for n in analise_elite["impares"]])
+            st.markdown(f"<div style='font-size:1.5rem;color:#000000;font-weight:900;'>{i_txt}</div>", unsafe_allow_html=True)
 
         with c_el4:
-            st.markdown("#### 📐 Melhores Diagonais")
+            st.markdown("#### 📐 MELHORES DIAGONAIS")
             dc_txt = ", ".join([f"DC{d+1:02d}" for d in analise_elite["dc"]])
             dd_txt = ", ".join([f"DD{d+1:02d}" for d in analise_elite["dd"]])
-            st.markdown(f"<div style='font-size:1.1rem;color:#000000;font-weight:900;'>Crescentes (/): {dc_txt}<br>Decrescentes (\\): {dd_txt}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:1.25rem;color:#000000;font-weight:900;'>CRESCENTES: {dc_txt}<br>DECRESCENTES: {dd_txt}</div>", unsafe_allow_html=True)
 
         st.divider()
 
         pool_elite_ordenado = analise_elite["pool_elite"]
         dezenas_elite_txt = " - ".join([f"{n:02d}" for n in pool_elite_ordenado])
         st.markdown(
-            f"<div style='font-size:1.25rem;color:#000000;font-weight:900;padding:8px 0;'>"
-            f"🎯 Pool Consolidado das Elites ({len(pool_elite_ordenado)} dezenas agrupadas):<br>"
-            f"<span style='background:#bbf7d0;padding:4px 10px;border:2px solid #000000;border-radius:6px;display:inline-block;margin-top:6px;'>"
+            f"<div style='font-size:1.35rem;color:#000000;font-weight:900;padding:8px 0;'>"
+            f"🎯 POOL CONSOLIDADO DAS ELITES ({len(pool_elite_ordenado)} DEZENAS AGRUPADAS):<br>"
+            f"<span style='background:#facc15;padding:6px 14px;border:3px solid #000000;border-radius:6px;display:inline-block;margin-top:8px;'>"
             f"{dezenas_elite_txt}</span></div>",
             unsafe_allow_html=True
         )
 
         c_act1, c_act2 = st.columns([1, 1])
         with c_act1:
-            if st.button("⭐ Carregar Somente Este Pool de Elite na Cartela", use_container_width=True, type="primary"):
+            if st.button("⭐ CARREGAR SOMENTE ESTE POOL DE ELITE NA CARTELA", use_container_width=True, type="primary"):
                 st.session_state.pool_trabalho = set(pool_elite_ordenado)
                 st.rerun()
 
         with c_act2:
-            if st.button("🎛️ Gerar e Ativar Filtro Baseado Nestas Condicionantes", use_container_width=True):
+            if st.button("🎛️ GERAR E ATIVAR FILTRO COM ESTAS CONDICIONANTES", use_container_width=True):
                 preset_elite = extrair_filtros_de_jogo(pool_elite_ordenado, modo="flexivel")
                 st.session_state.presets_filtros["FILTRO_ELITE_CONDICIONANTES"] = preset_elite
                 aplicar_preset("FILTRO_ELITE_CONDICIONANTES")
-                st.success("Filtro 'FILTRO_ELITE_CONDICIONANTES' ativado na Aba 2!")
+                st.success("FILTRO 'FILTRO_ELITE_CONDICIONANTES' ATIVADO NA ABA 2!")
                 st.rerun()
 
     st.write("")
 
-    st.subheader("🎟️ Cartela Interativa de 60 Números (Matriz 6x10)")
-    st.markdown("**Dezenas nas Elites recebem a estrela ⭐. Clique para marcar/desmarcar:**")
+    st.subheader("🎟️ CARTELA DE 60 NÚMEROS (MATRIZ 6x10)")
+    st.markdown("**AMARELO = MARCADO NO POOL | BRANCO = NÃO MARCADO | ⭐ = ELITE**")
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
@@ -881,14 +864,12 @@ with tab_cartela:
         for c in range(10):
             n = r * 10 + c + 1
             meta = dados_calor[n]
-            estilo = obter_estilo_calor(meta["score"])
             esta_ativa = n in st.session_state.pool_trabalho
             e_elite = n in set_elite
 
             tipo_btn = "primary" if esta_ativa else "secondary"
-            check_ico = "🟢" if esta_ativa else "⚪"
             star_ico = "⭐" if e_elite else ""
-            rotulo = f"{check_ico}{star_ico} {n:02d}\n{estilo['icone']}{meta['score']:.0f}p"
+            rotulo = f"{n:02d}{star_ico}\n({meta['score']:.0f}p)"
 
             with cols[c]:
                 if st.button(rotulo, key=f"btn_num_{n}", type=tipo_btn, use_container_width=True):
@@ -899,24 +880,22 @@ with tab_cartela:
     col_inf1, col_inf2 = st.columns([3, 1])
     qtd_sel = len(st.session_state.pool_trabalho)
     with col_inf1:
+        dezenas_txt = " - ".join([f"{n:02d}" for n in sorted(list(st.session_state.pool_trabalho))])
         st.markdown(
-            "<div style='font-size:1.15rem;font-weight:900;color:#000000;margin-bottom:8px;'>"
-            "LEGENDA: ⭐ Elite &nbsp;|&nbsp; 🔥 Onda 3 &nbsp;|&nbsp; ☀️ Retração Fib &nbsp;|&nbsp; 🌤️ Acumulação &nbsp;|&nbsp; ❄️ Repouso"
-            "</div>",
+            f"<div style='font-size:1.3rem;font-weight:900;color:#000000;background:#fef08a;border:3px solid #000000;padding:12px;border-radius:8px;'>"
+            f"DEZENAS ATIVAS NO POOL ({qtd_sel}):<br>{dezenas_txt if dezenas_txt else 'NENHUMA SELECIONADA'}</div>",
             unsafe_allow_html=True
         )
-        dezenas_txt = " - ".join([f"{n:02d}" for n in sorted(list(st.session_state.pool_trabalho))])
-        st.success(f"✅ Dezenas Ativas ({qtd_sel}): {dezenas_txt if dezenas_txt else 'Nenhuma'}")
     with col_inf2:
         total_comb = math.comb(qtd_sel, 6) if qtd_sel >= 6 else 0
-        st.metric("Dezenas Selecionadas", f"{qtd_sel} / 60")
-        st.markdown(f"<div style='font-size:1.1rem;font-weight:900;color:#000000;'>Espaço Bruto: {total_comb:,} jogos</div>", unsafe_allow_html=True)
+        st.metric("Total Selecionado", f"{qtd_sel} / 60")
+        st.markdown(f"<div style='font-size:1.2rem;font-weight:900;color:#000000;'>Jogos Brutos: {total_comb:,}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
 # ABA 2: CONFIGURAÇÃO DOS FILTROS & MOTOR COMBINATÓRIO
 # ==============================================================================
 with tab_config:
-    st.markdown("### 🎛️ Filtros Estruturais & Engenharia Reversa")
+    st.markdown("### 🎛️ FILTROS ESTRUTURAIS & ENGENHARIA REVERSA")
 
     tipo_reverso = st.radio(
         "Selecione a Rotina de Engenharia Reversa:",
@@ -929,27 +908,24 @@ with tab_config:
 
     if tipo_reverso.startswith("🏛️ Rotina 1"):
         with st.container(border=True):
-            st.markdown("#### 🏛️ Engenharia Reversa Multiconcursos: Otimização Histórica")
-            st.markdown("**Escolha a quantidade de concursos anteriores recentes para sintetizar o Melhor Filtro Combinado.**")
-
+            st.markdown("#### 🏛️ ENGENHARIA REVERSA MULTICONCURSOS")
             total_disp = len(st.session_state.historico)
             col_m1, col_m2, col_m3 = st.columns([1.5, 1.8, 1.7])
             with col_m1:
                 qtd_concursos_sel = st.slider(
-                    "Concursos Anteriores para Analisar:",
+                    "Concursos Anteriores:",
                     min_value=1,
                     max_value=max(1, total_disp),
-                    value=min(10, total_disp),
-                    help=f"Total disponível em memória: {total_disp} sorteios."
+                    value=min(10, total_disp)
                 )
             with col_m2:
                 nome_filtro_multi = st.text_input(
-                    "Nome da Predefinição:",
+                    "Nome do Filtro:",
                     value=f"FILTRO_ULT_{qtd_concursos_sel}_CONCURSOS",
                     key="input_nome_multi"
                 )
                 carregar_pool_multi = st.checkbox(
-                    "Carregar Dezenas Desses Sorteios no Pool",
+                    "Carregar Dezenas no Pool Ativo",
                     value=True
                 )
             with col_m3:
@@ -960,8 +936,8 @@ with tab_config:
                     key="sel_tolerancia_multi"
                 )
 
-            if st.button("🚀 Processar Concursos, Criar e Ativar Melhor Filtro", type="primary", use_container_width=True):
-                with st.spinner("Varrendo e modelando concursos selecionados..."):
+            if st.button("🚀 PROCESSAR CONCURSOS, CRIAR E ATIVAR FILTRO", type="primary", use_container_width=True):
+                with st.spinner("Processando..."):
                     sorteios_alvo = st.session_state.historico[-qtd_concursos_sel:]
                     modo_extrair = "preciso" if tolerancia_multi.startswith("Envelope Preciso") else "flexivel"
                     preset_multi = extrair_filtros_multiconcursos(sorteios_alvo, modo=modo_extrair)
@@ -987,36 +963,34 @@ with tab_config:
                         "total_dezenas_unicas": len(dezenas_unicas_periodo),
                         "dezenas": dezenas_unicas_periodo,
                         "timestamp": hora_agora,
-                        "status": "CONCLUÍDO & ATIVO NO MOTOR",
+                        "status": "CONCLUÍDO & ATIVO",
                         "modo": tolerancia_multi,
                         "audit": audit_dados,
                         "pool_atualizado": carregar_pool_multi
                     }
 
-                    st.success(f"🎉 Sucesso! O melhor filtro para os últimos {qtd_concursos_sel} concursos foi sintetizado e ativado!")
+                    st.success(f"Filtro para os últimos {qtd_concursos_sel} concursos ativado!")
                     st.rerun()
 
     else:
         with st.container(border=True):
-            st.markdown("#### ⚡ Engenharia Reversa por Dezenas Digitadas (6 a 60 Números)")
-            st.markdown("**Cole de 6 a 60 dezenas avulsas. O motor sintetiza a distribuição ideal e envia direto ao painel.**")
-
+            st.markdown("#### ⚡ ENGENHARIA REVERSA POR DEZENAS DIGITADAS")
             col_input_res, col_input_nome, col_input_tipo = st.columns([2.5, 1.8, 1.7])
             with col_input_res:
                 entrada_dezenas_filtro = st.text_area(
-                    "Dezenas de Referência (6 a 60 números):",
+                    "Dezenas (6 a 60 números):",
                     value=st.session_state.input_resultado_reverso_val,
                     height=75,
                     key="input_resultado_reverso"
                 )
             with col_input_nome:
                 nome_filtro_novo = st.text_input(
-                    "Nome para Salvar o Filtro:",
+                    "Nome do Filtro:",
                     value="MEU_NOVO_FILTRO",
                     key="input_nome_filtro_auto"
                 )
                 substituir_pool_opcao = st.checkbox(
-                    "Definir estas dezenas como Pool Ativo",
+                    "Definir como Pool Ativo",
                     value=True
                 )
             with col_input_tipo:
@@ -1029,17 +1003,17 @@ with tab_config:
 
             c_btn_rev1, c_btn_rev2 = st.columns([2, 1])
             with c_btn_rev1:
-                if st.button("⚡ Gerar, Gravar e Ativar Filtro Deste Conjunto", type="primary", use_container_width=True):
+                if st.button("⚡ GERAR, GRAVAR E ATIVAR FILTRO", type="primary", use_container_width=True):
                     nums_parse = [int(x) for x in re.findall(r"\b\d+\b", entrada_dezenas_filtro)]
                     dezenas_limpas = sorted(list(set([n for n in nums_parse if 1 <= n <= 60])))
                     total_identificado = len(dezenas_limpas)
 
                     if total_identificado < 6:
-                        st.error(f"Informe pelo menos 6 dezenas válidas (entre 01 e 60). Foram identificadas {total_identificado}.")
+                        st.error(f"Informe pelo menos 6 dezenas válidas (entre 01 e 60). Identificadas: {total_identificado}.")
                     elif total_identificado > 60:
-                        st.error(f"O limite máximo é de 60 dezenas. Foram informadas {total_identificado}.")
+                        st.error(f"O limite máximo é 60 dezenas. Informadas: {total_identificado}.")
                     elif not nome_filtro_novo.strip():
-                        st.error("Informe um nome para o novo filtro.")
+                        st.error("Informe um nome para o filtro.")
                     else:
                         modo_sel = "exato" if tipo_tolerancia.startswith("Perfil Exato") else "flexivel"
                         preset_extraido = extrair_filtros_de_jogo(dezenas_limpas, modo=modo_sel)
@@ -1060,54 +1034,42 @@ with tab_config:
                             "qtd_dezenas": total_identificado,
                             "dezenas": dezenas_limpas,
                             "timestamp": hora_agora,
-                            "status": "PROCESSADO & GRAVADO COM SUCESSO",
+                            "status": "PROCESSADO & ATIVO",
                             "modo": tipo_tolerancia,
                             "pool_atualizado": substituir_pool_opcao
                         }
 
-                        st.success(f"🎉 Filtro '{nome_salvar}' gerado, gravado na memória e ativado com sucesso!")
+                        st.success(f"Filtro '{nome_salvar}' ativado com sucesso!")
                         st.rerun()
 
             with c_btn_rev2:
                 st.button("🔄 Puxar Último Concurso", on_click=cb_puxar_ultimo, use_container_width=True)
 
-    # Linha de Trabalho com bordas fortes e texto preto
+    # Linha de Trabalho
     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
     if st.session_state.linha_trabalho_reverso:
         lt = st.session_state.linha_trabalho_reverso
         is_multi = lt.get("tipo") == "MULTICONCURSOS"
         dezenas_formatadas = " - ".join([f"{n:02d}" for n in sorted(lt["dezenas"])])
-        pool_info = "Cartela sincronizada com este pool" if lt["pool_atualizado"] else "Cartela prévia preservada"
 
         if is_multi:
             detalhes_audit = (
-                f"• <strong>Base de Auditoria:</strong> <strong>{lt['qtd_concursos']} concursos recentes</strong> analisados.<br>"
-                f"• <strong>Dezenas Abrangidas no Histórico ({lt['total_dezenas_unicas']}):</strong> <span style='font-family:monospace;color:#000000;font-weight:900;'>{dezenas_formatadas}</span><br>"
-                f"• <strong>Faixa de Soma Observada:</strong> <code>{lt['audit']['soma_min_real']}</code> até <code>{lt['audit']['soma_max_real']}</code> | "
-                f"<strong>Primos Reais:</strong> <code>{lt['audit']['primos_reais']}</code> | "
-                f"<strong>Moldura Real:</strong> <code>{lt['audit']['moldura_reais']}</code>"
+                f"• Concursos Analisados: {lt['qtd_concursos']}<br>"
+                f"• Dezenas Auditadas: {dezenas_formatadas}<br>"
+                f"• Soma Observada: {lt['audit']['soma_min_real']} até {lt['audit']['soma_max_real']} | "
+                f"Primos: {lt['audit']['primos_reais']} | Moldura: {lt['audit']['moldura_reais']}"
             )
         else:
-            detalhes_audit = (
-                f"• <strong>Volume Analisado:</strong> <strong>{lt['qtd_dezenas']} dezenas</strong> computadas em linhas, colunas e diagonais.<br>"
-                f"• <strong>Dezenas Auditadas:</strong> <span style='font-family:monospace;color:#000000;font-weight:900;'>{dezenas_formatadas}</span>"
-            )
+            detalhes_audit = f"• Total de Dezenas: {lt['qtd_dezenas']}<br>• Dezenas: {dezenas_formatadas}"
 
         st.markdown(
             f"""
-            <div style="background:#dcfce7;border:2px solid #000000;border-left:8px solid #000000;border-radius:8px;padding:14px;margin-bottom:15px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-                    <span style="font-weight:900;color:#000000;font-size:15px;">
-                        🟢 LINHA DE TRABALHO: {lt['status']} ({lt.get('tipo', 'OPERACIONAL')})
-                    </span>
-                    <span style="font-size:13px;color:#000000;font-family:monospace;background:#bbf7d0;border:1px solid #000000;padding:3px 10px;border-radius:4px;font-weight:900;">
-                        🕒 {lt['timestamp']}
-                    </span>
+            <div style="background:#ffffff;border:4px solid #000000;border-radius:8px;padding:16px;margin-bottom:15px;">
+                <div style="font-weight:900;color:#000000;font-size:16px;">
+                    STATUS DA LINHA: {lt['status']} ({lt['nome']}) | 🕒 {lt['timestamp']}
                 </div>
-                <div style="margin-top:10px;font-size:14px;color:#000000;line-height:1.7;font-weight:700;">
-                    • <strong>Filtro Ativo:</strong> <code style="color:#000000;background:#ffffff;border:1px solid #000000;padding:2px 8px;border-radius:4px;font-weight:900;">{lt['nome']}</code> ({lt['modo']})<br>
-                    {detalhes_audit}<br>
-                    • <strong>Sincronização:</strong> Gravado no catálogo de predefinições ({pool_info}).
+                <div style="margin-top:10px;font-size:14px;color:#000000;font-weight:800;line-height:1.7;">
+                    {detalhes_audit}
                 </div>
             </div>
             """,
@@ -1116,24 +1078,23 @@ with tab_config:
 
     # Gerenciador de Predefinições
     with st.container(border=True):
-        st.markdown("#### 💾 Gerenciador de Predefinições Salvas")
+        st.markdown("#### 💾 GERENCIADOR DE PREDEFINIÇÕES")
         col_puxar, col_gravar = st.columns(2)
 
         with col_puxar:
-            st.markdown("**Carregar Filtro Salvo:**")
             lista_nomes = list(st.session_state.presets_filtros.keys())
-            filtro_escolhido = st.selectbox("Selecione o filtro:", lista_nomes, index=0, key="select_preset_load")
+            filtro_escolhido = st.selectbox("Carregar Filtro Salvo:", lista_nomes, index=0, key="select_preset_load")
 
             c_pux1, c_pux2 = st.columns(2)
             with c_pux1:
-                if st.button("🚀 Aplicar Predefinição", use_container_width=True):
+                if st.button("🚀 APLICAR PREDEFINIÇÃO", use_container_width=True):
                     aplicar_preset(filtro_escolhido)
                     st.success(f"Filtro '{filtro_escolhido}' carregado!")
                     st.rerun()
             with c_pux2:
                 json_presets = json.dumps(st.session_state.presets_filtros, indent=2, ensure_ascii=False)
                 st.download_button(
-                    "💾 Baixar Filtros (.JSON)",
+                    "💾 BAIXAR (.JSON)",
                     data=json_presets,
                     file_name="meus_filtros_mega60.json",
                     mime="application/json",
@@ -1141,12 +1102,11 @@ with tab_config:
                 )
 
         with col_gravar:
-            st.markdown("**Gravar Configuração Manual Atual:**")
-            nome_novo_filtro = st.text_input("Nome da predefinição manual:", placeholder="Ex: Filtro Personalizado", key="input_nome_filtro_manual")
+            nome_novo_filtro = st.text_input("Gravar Configuração Manual Atual:", placeholder="Ex: Meu Filtro 1", key="input_nome_filtro_manual")
 
             c_grv1, c_grv2 = st.columns(2)
             with c_grv1:
-                if st.button("💾 Gravar Manual", use_container_width=True):
+                if st.button("💾 GRAVAR MANUAL", use_container_width=True):
                     if not nome_novo_filtro.strip():
                         st.error("Informe um nome para a predefinição.")
                     else:
@@ -1158,17 +1118,17 @@ with tab_config:
                             "primos": st.session_state.get("sel_primos", [3]),
                             "pares": st.session_state.get("sel_pares", ["2P / 4I"]),
                             "moldura": st.session_state.get("sel_moldura", [5]),
-                            "soma": st.session_state.get("sel_soma", (150, 190))
+                            "soma": (int(st.session_state.get("sel_soma", (150, 190))[0]), int(st.session_state.get("sel_soma", (150, 190))[1]))
                         }
                         st.session_state.presets_filtros[nome_novo_filtro.strip()] = novo_preset
                         st.success(f"Predefinição '{nome_novo_filtro.strip()}' gravada!")
                         st.rerun()
             with c_grv2:
-                arq_json_upload = st.file_uploader("Importar Filtros (.JSON):", type=["json"], label_visibility="collapsed")
+                arq_json_upload = st.file_uploader("Importar (.JSON):", type=["json"], label_visibility="collapsed")
                 if arq_json_upload is not None:
                     try:
                         st.session_state.presets_filtros.update(json.load(arq_json_upload))
-                        st.success("Filtros importados com sucesso!")
+                        st.success("Importado com sucesso!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro ao ler JSON: {e}")
@@ -1177,7 +1137,7 @@ with tab_config:
     opcoes_nomes = list(OPCOES_QUANTIDADE.keys())
 
     with st.container(border=True):
-        st.markdown("#### 1️⃣ Linhas Individuais (L01 a L06)")
+        st.markdown("#### 1️⃣ LINHAS INDIVIDUAIS (L01 a L06)")
         cols_l = st.columns(6)
         limites_linhas = []
         for r in range(6):
@@ -1188,7 +1148,7 @@ with tab_config:
                 limites_linhas.append(OPCOES_QUANTIDADE[esc])
 
     with st.container(border=True):
-        st.markdown("#### 2️⃣ Colunas Individuais (C01 a C10)")
+        st.markdown("#### 2️⃣ COLUNAS INDIVIDUAIS (C01 a C10)")
         cols_c_up, cols_c_dw = st.columns(5), st.columns(5)
         limites_colunas = []
         for c in range(10):
@@ -1202,7 +1162,7 @@ with tab_config:
     c_diag1, c_diag2 = st.columns(2)
     with c_diag1:
         with st.container(border=True):
-            st.markdown("#### 3️⃣ Diag. Crescentes (DC01 a DC10 /)")
+            st.markdown("#### 3️⃣ DIAGONAIS CRESCENTES (DC01 a DC10 /)")
             with st.expander("Expandir Diagonais Crescentes", expanded=False):
                 limites_dc = []
                 for d in range(10):
@@ -1212,7 +1172,7 @@ with tab_config:
                     limites_dc.append(OPCOES_QUANTIDADE[esc])
     with c_diag2:
         with st.container(border=True):
-            st.markdown("#### 4️⃣ Diag. Decrescentes (DD01 a DD10 \\)")
+            st.markdown("#### 4️⃣ DIAGONAIS DECRESCENTES (DD01 a DD10 \\)")
             with st.expander("Expandir Diagonais Decrescentes", expanded=False):
                 limites_dd = []
                 for d in range(10):
@@ -1222,7 +1182,7 @@ with tab_config:
                     limites_dd.append(OPCOES_QUANTIDADE[esc])
 
     with st.container(border=True):
-        st.markdown("#### 5️⃣ Primos, Pares, Moldura e Faixa de Soma")
+        st.markdown("#### 5️⃣ PRIMOS, PARES, MOLDURA E FAIXA DE SOMA")
         c_p1, c_p2, c_p3, c_p4 = st.columns(4)
         with c_p1:
             primos_sel = st.multiselect("Quantidade de Primos:", list(range(7)), default=st.session_state.get("sel_primos", [3]), key="sel_primos")
@@ -1233,7 +1193,21 @@ with tab_config:
         with c_p3:
             moldura_sel = st.multiselect("Dezenas na Moldura:", list(range(7)), default=st.session_state.get("sel_moldura", [5]), key="sel_moldura")
         with c_p4:
-            faixa_soma = st.slider("Faixa de Soma:", 50, 320, st.session_state.get("sel_soma", (150, 190)), key="sel_soma")
+            # BLINDAGEM DO SLIDER DE SOMA: Garante tupla de inteiros
+            val_soma_estado = st.session_state.get("sel_soma", (150, 190))
+            if isinstance(val_soma_estado, (list, tuple)) and len(val_soma_estado) == 2:
+                soma_min_val = int(val_soma_estado[0])
+                soma_max_val = int(val_soma_estado[1])
+            else:
+                soma_min_val, soma_max_val = 150, 190
+
+            faixa_soma = st.slider(
+                "Faixa de Soma:",
+                min_value=50,
+                max_value=320,
+                value=(soma_min_val, soma_max_val),
+                key="sel_soma"
+            )
 
     config_total = {
         "linhas": limites_linhas,
@@ -1248,11 +1222,11 @@ with tab_config:
 
     st.divider()
 
-    st.markdown("#### ⚙️ Controle de Execução e Teto de Combinações")
+    st.markdown("#### ⚙️ CONTROLE DE EXECUÇÃO")
     c_ctrl1, c_ctrl2 = st.columns([2, 2])
     with c_ctrl1:
         sem_limite = st.checkbox(
-            "♾️ **Sem Limite (Gerar Todas as Combinações Válidas)**",
+            "♾️ SEM LIMITE (GERAR TODAS AS APROVADAS)",
             value=True
         )
     with c_ctrl2:
@@ -1266,7 +1240,7 @@ with tab_config:
             )
         else:
             teto_apostas = None
-            st.info("ℹ️ Teto desativado: Todas as combinações válidas serão calculadas.")
+            st.info("Teto desativado: Todas as combinações válidas serão calculadas.")
 
     placeholder_metricas = st.empty()
     barra_progresso = st.progress(0, text="Pronto para processar...")
@@ -1275,17 +1249,17 @@ with tab_config:
 
     col_btn_gen, col_btn_raw = st.columns(2)
     with col_btn_gen:
-        if st.button("🚀 Gerar e Filtrar Apostas com a Configuração Ativa", use_container_width=True, disabled=not pode_processar, type="primary"):
+        if st.button("🚀 GERAR E FILTRAR APOSTAS", use_container_width=True, disabled=not pode_processar, type="primary"):
             if not primos_sel or not par_sel or not moldura_sel:
                 st.error("Selecione os parâmetros de Primos, Pares e Moldura.")
             else:
-                with st.status("🛠️ Processando Motor Combinatório...", expanded=True) as status_box:
+                # BLINDAGEM: Substituto seguro de st.status para evitar quebras em versões antigas
+                with st.spinner("🛠️ Processando Motor Combinatório..."):
                     t0 = time.time()
                     resultados = executar_varredura_pool(
                         st.session_state.pool_trabalho,
                         config_total,
                         barra_progresso,
-                        status_box,
                         placeholder_metricas,
                         teto_max=teto_apostas
                     )
@@ -1294,33 +1268,25 @@ with tab_config:
                     total_gerado = len(resultados)
 
                     if total_gerado > 0:
-                        status_box.update(
-                            label=f"✅ Sucesso! {total_gerado:,} aposta(s) aprovada(s) em {t_fim:.2f}s.",
-                            state="complete",
-                            expanded=False
-                        )
+                        st.success(f"✅ Sucesso: {total_gerado:,} apostas geradas em {t_fim:.2f}s.")
                     else:
-                        status_box.update(
-                            label=f"⚠️ Concluído em {t_fim:.2f}s: Nenhuma combinação atendeu aos filtros selecionados.",
-                            state="error",
-                            expanded=True
-                        )
+                        st.warning(f"⚠️ Nenhuma combinação atendeu aos filtros selecionados em {t_fim:.2f}s.")
 
     with col_btn_raw:
         k_pool = len(st.session_state.pool_trabalho)
         comb_totais_pool = math.comb(k_pool, 6) if k_pool >= 6 else 0
-        if st.button(f"📦 Exportar Pool Bruto Completo ({comb_totais_pool:,} Jogos)", use_container_width=True, disabled=not pode_processar):
-            with st.spinner("Gerando arquivo do pool bruto..."):
+        if st.button(f"📦 EXPORTAR POOL BRUTO ({comb_totais_pool:,} JOGOS)", use_container_width=True, disabled=not pode_processar):
+            with st.spinner("Gerando arquivo..."):
                 dezenas_cands = sorted(list(st.session_state.pool_trabalho))
                 buffer_txt = io.StringIO()
                 for c in combinations(dezenas_cands, 6):
                     buffer_txt.write(" ".join([f"{n:02d}" for n in c]) + "\n")
                 st.session_state["raw_pool_file"] = buffer_txt.getvalue()
-                st.success(f"Pool bruto de {comb_totais_pool:,} combinações gerado na memória!")
+                st.success("Pool bruto gerado!")
 
     if "raw_pool_file" in st.session_state:
         st.download_button(
-            "💾 Baixar Arquivo do Pool Bruto (.TXT)",
+            "💾 BAIXAR ARQUIVO DO POOL BRUTO (.TXT)",
             data=st.session_state["raw_pool_file"],
             file_name=f"mega60_pool_bruto_{len(st.session_state.pool_trabalho)}dezenas.txt",
             mime="text/plain",
@@ -1329,13 +1295,13 @@ with tab_config:
 
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
-        st.success(f"🎯 Total Aprovado: {qtd_aprov:,} apostas oficiais geradas (ordenadas do menor para o maior).")
+        st.success(f"Total Aprovado: {qtd_aprov:,} apostas geradas (menor para o maior).")
         txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
 
         c_d1, c_d2 = st.columns([3, 1])
         with c_d1:
             st.download_button(
-                "📥 Baixar Arquivo com Jogos Aprovados (.TXT)",
+                "📥 BAIXAR JOGOS APROVADOS (.TXT)",
                 data=txt_saida,
                 file_name=f"mega60_apostas_filtradas_{qtd_aprov}.txt",
                 mime="text/plain",
@@ -1348,12 +1314,12 @@ with tab_config:
 # ABA 3: VOLANTE VISUAL & RAIO-X
 # ==============================================================================
 with tab_volante:
-    st.subheader("Dissecação da Cartela Oficial")
+    st.subheader("DISSECAÇÃO DA CARTELA")
     jogos_exibir = st.session_state.jogos_aprovados or st.session_state.jogos_upload
 
     if jogos_exibir:
         total_jogos = len(jogos_exibir)
-        sel_idx = st.slider("Escolha a aposta para inspecionar:", 1, total_jogos, 1) if total_jogos > 1 else 1
+        sel_idx = st.slider("Aposta para inspecionar:", 1, total_jogos, 1) if total_jogos > 1 else 1
         jogo_ativo = sorted(jogos_exibir[sel_idx - 1])
         marcadas = set(jogo_ativo)
 
@@ -1364,24 +1330,23 @@ with tab_volante:
                 for c in range(10):
                     n = r * 10 + c + 1
                     if n in marcadas:
-                        celulas += f'<div style="width:38px;height:38px;background:#22c55e;color:#000000;border:2px solid #000000;font-weight:900;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;">{n:02d}</div>'
+                        celulas += f'<div style="width:42px;height:42px;background:#facc15;color:#000000;border:3px solid #000000;font-weight:900;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:16px;">{n:02d}</div>'
                     else:
-                        bg = "#e2e8f0" if n in MOLDURA_SET else "#ffffff"
-                        celulas += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border:1px solid #000000;font-weight:800;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:14px;">{n:02d}</div>'
+                        celulas += f'<div style="width:42px;height:42px;background:#ffffff;color:#000000;border:1px solid #000000;font-weight:900;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:16px;">{n:02d}</div>'
 
             html_cartela = f"""
             <!DOCTYPE html><html><head><meta charset="utf-8">
-            <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:sans-serif;}}
-            .box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
-            .grid{{display:grid;grid-template-columns:repeat(10,38px);gap:4px;}}</style></head><body>
-            <div class="box"><div style="font-weight:900;font-size:15px;margin-bottom:10px;color:#000000;text-align:center;">Jogo #{sel_idx:04d}: {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
+            <style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;display:flex;justify-content:center;background:transparent;font-family:Arial,sans-serif;}}
+            .box{{background:#fff;border:4px solid #000000;border-radius:10px;padding:12px;width:fit-content;}}
+            .grid{{display:grid;grid-template-columns:repeat(10,42px);gap:5px;}}</style></head><body>
+            <div class="box"><div style="font-weight:900;font-size:16px;margin-bottom:10px;color:#000000;text-align:center;">JOGO #{sel_idx:04d}: {' - '.join([f'{n:02d}' for n in jogo_ativo])}</div>
             <div class="grid">{celulas}</div></div></body></html>
             """
-            components.html(html_cartela, height=340, scrolling=False)
+            components.html(html_cartela, height=360, scrolling=False)
 
         with c_v2:
             with st.container(border=True):
-                st.markdown("#### 🔬 Raio-X Detalhado do Jogo")
+                st.markdown("#### 🔬 RAIO-X DO JOGO")
                 cnt_linhas = Counter(PROPS[n]["r"] + 1 for n in jogo_ativo)
                 cnt_colunas = Counter(PROPS[n]["c"] + 1 for n in jogo_ativo)
                 cnt_dc = Counter(PROPS[n]["dc"] + 1 for n in jogo_ativo)
@@ -1398,15 +1363,13 @@ with tab_volante:
                 st.divider()
                 st.markdown(f"**Pares/Ímpares:** `{pa}P / {6-pa}I` | **Primos:** `{pr}` | **Moldura:** `{mo}` | **Soma:** `{sum(jogo_ativo)}`")
     else:
-        st.info("Gere apostas ou carregue um arquivo para visualizá-las no volante oficial.")
+        st.info("Gere apostas para inspecionar no volante.")
 
 # ==============================================================================
 # ABA 4: UPLOAD & FILTRAGEM SUCESSIVA
 # ==============================================================================
 with tab_upload:
-    st.subheader("📥 Upload, Filtragem Sucessiva & Conferência")
-    st.markdown("**Faça upload de uma lista de apostas e aplique filtros estruturais em lote para refinar seu fechamento.**")
-
+    st.subheader("📥 UPLOAD, FILTRAGEM & CONFERÊNCIA")
     arquivo_enviado = st.file_uploader("Carregue seu arquivo de apostas (.txt ou .csv):", type=["txt", "csv"])
 
     if arquivo_enviado is not None:
@@ -1414,35 +1377,34 @@ with tab_upload:
         jogos_carregados, invalidos = processar_arquivo_upload(conteudo)
         st.session_state.jogos_upload = jogos_carregados
         if invalidos > 0:
-            st.warning(f"⚠️ {invalidos} linha(s) ignoradas por não conterem 6 dezenas válidas (1 a 60).")
+            st.warning(f"⚠️ {invalidos} linha(s) ignoradas.")
 
     if st.session_state.jogos_upload:
         jogos_up = st.session_state.jogos_upload
         total_up = len(jogos_up)
-        st.success(f"✅ Arquivo Carregado: {total_up:,} apostas oficiais prontas em memória.")
+        st.success(f"Arquivo Carregado: {total_up:,} apostas em memória.")
 
         with st.container(border=True):
-            st.markdown("#### ⚡ Filtrar Arquivo Carregado pelos Filtros da Aba 2")
-            st.markdown("**Passe o lote carregado pelas regras ativas de Linhas, Colunas, Diagonais, Soma, Primos, Moldura e Pares.**")
+            st.markdown("#### ⚡ FILTRAR ARQUIVO CARREGADO")
 
             c_flt1, c_flt2 = st.columns([2, 1])
             with c_flt1:
-                if st.button("🔍 Aplicar Filtros Ativos no Arquivo Carregado", type="primary", use_container_width=True):
-                    with st.spinner("Filtrando apostas carregadas..."):
+                if st.button("🔍 APLICAR FILTROS ATIVOS NO ARQUIVO", type="primary", use_container_width=True):
+                    with st.spinner("Filtrando apostas..."):
                         t_ini_flt = time.time()
                         aprovados_do_arquivo = [
                             j for j in jogos_up if validar_aposta_final_6(tuple(j), config_total)
                         ]
                         t_fim_flt = time.time() - t_ini_flt
                         st.session_state.jogos_filtrados_upload = aprovados_do_arquivo
-                        st.success(f"Concluído em {t_fim_flt:.2f}s! {len(aprovados_do_arquivo):,} de {total_up:,} apostas passaram nos filtros.")
+                        st.success(f"Concluído em {t_fim_flt:.2f}s! {len(aprovados_do_arquivo):,} de {total_up:,} aprovadas.")
 
             if st.session_state.jogos_filtrados_upload:
                 qtd_flt = len(st.session_state.jogos_filtrados_upload)
                 txt_flt = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_filtrados_upload])
                 with c_flt2:
                     st.download_button(
-                        f"💾 Baixar Lote Filtrado ({qtd_flt:,} Jogos)",
+                        f"💾 BAIXAR LOTE FILTRADO ({qtd_flt:,} JOGOS)",
                         data=txt_flt,
                         file_name=f"mega60_lote_filtrado_{qtd_flt}.txt",
                         mime="text/plain",
@@ -1454,7 +1416,7 @@ with tab_upload:
         col_diag_left, col_conf_right = st.columns([1, 1], gap="large")
 
         with col_diag_left:
-            st.markdown("### 📊 Diagnóstico das Apostas Carregadas")
+            st.markdown("### 📊 DIAGNÓSTICO DO ARQUIVO")
             cnt_nums = Counter()
             somas = []
             for j in jogos_up:
@@ -1462,42 +1424,39 @@ with tab_upload:
                 somas.append(sum(j))
 
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total de Jogos", f"{total_up:,}")
+            m1.metric("Total", f"{total_up:,}")
             m2.metric("Soma Média", f"{sum(somas)/len(somas):.1f}")
             m3.metric("Mais Frequente", f"{cnt_nums.most_common(1)[0][0]:02d}")
 
-            st.markdown("#### 🔥 Frequência na Matriz 6x10")
-            v_min, v_max = (min(cnt_nums.values()) if cnt_nums else 0), (max(cnt_nums.values()) if cnt_nums else 1)
-            delta_v = max(1, v_max - v_min)
+            st.markdown("#### 🔥 FREQUÊNCIA NA MATRIZ")
             celulas_up_heat = ""
             for r in range(6):
                 for c in range(10):
                     n = r * 10 + c + 1
                     freq = cnt_nums[n]
-                    ratio = (freq - v_min) / delta_v
-                    bg = "#ffffff" if freq == 0 else ("#bbf7d0" if ratio < 0.35 else ("#fed7aa" if ratio < 0.70 else "#fca5a5"))
-                    celulas_up_heat += f'<div style="width:38px;height:38px;background:{bg};color:#000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:1px solid #000000;box-sizing:border-box;"><span style="font-size:12px;font-weight:900;">{n:02d}</span><span style="font-size:9px;font-weight:900;">{freq}x</span></div>'
+                    bg = "#ffffff" if freq == 0 else "#fef08a"
+                    celulas_up_heat += f'<div style="width:40px;height:40px;background:{bg};color:#000000;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;border:2px solid #000000;box-sizing:border-box;"><span style="font-size:13px;font-weight:900;">{n:02d}</span><span style="font-size:10px;font-weight:900;">{freq}x</span></div>'
 
-            html_up = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:sans-serif;}}.box{{background:#fff;border:3px solid #000000;border-radius:10px;padding:10px;width:fit-content;}}.grid{{display:grid;grid-template-columns:repeat(10,38px);gap:3px;}}</style></head><body><div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>'
-            components.html(html_up, height=290, scrolling=False)
+            html_up = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{{box-sizing:border-box;}}body{{margin:0;padding:0;background:transparent;display:flex;justify-content:center;font-family:Arial,sans-serif;}}.box{{background:#fff;border:4px solid #000000;border-radius:10px;padding:10px;width:fit-content;}}.grid{{display:grid;grid-template-columns:repeat(10,40px);gap:4px;}}</style></head><body><div class="box"><div class="grid">{celulas_up_heat}</div></div></body></html>'
+            components.html(html_up, height=310, scrolling=False)
 
         with col_conf_right:
-            st.markdown("### 🎯 Conferência de Resultados")
+            st.markdown("### 🎯 CONFERÊNCIA DE RESULTADOS")
             ult_sorteio = st.session_state.historico[-1] if st.session_state.historico else [4, 12, 18, 30, 35, 54]
             txt_padrao = " ".join([f"{n:02d}" for n in sorted(ult_sorteio)])
 
-            modo_origem = st.radio("Origem do Sorteio:", ["Último Sorteio Oficial", "Digitar Manualmente"], horizontal=True)
+            modo_origem = st.radio("Origem:", ["Último Sorteio Oficial", "Digitar Manualmente"], horizontal=True)
             if modo_origem == "Último Sorteio Oficial":
                 dezenas_conf = sorted(ult_sorteio)
             else:
-                entrada_manual = st.text_input("6 Dezenas Sorteadas (separadas por espaço):", value=txt_padrao)
+                entrada_manual = st.text_input("6 Dezenas Sorteadas:", value=txt_padrao)
                 nums_man = [int(x) for x in re.findall(r"\b\d+\b", entrada_manual)]
                 dezenas_conf = sorted(list(set([n for n in nums_man if 1 <= n <= 60])))
 
             if len(dezenas_conf) != 6:
-                st.error("Informe exatamente 6 dezenas distintas entre 01 e 60 para conferir.")
+                st.error("Informe exatamente 6 dezenas distintas entre 01 e 60.")
             else:
-                render_cartao_sorteio_html(dezenas_conf, titulo="CARTÃO DO SORTEIO CONFERIDO")
+                render_cartao_sorteio_html(dezenas_conf, titulo="SORTEIO CONFERIDO")
                 base_conferir = st.session_state.jogos_filtrados_upload or jogos_up
                 relatorio_conf, placar_conf = conferir_apostas_contra_sorteio(base_conferir, dezenas_conf)
 
@@ -1509,20 +1468,20 @@ with tab_upload:
 
                 tot_prem = len(placar_conf[6]) + len(placar_conf[5]) + len(placar_conf[4])
                 if tot_prem > 0:
-                    st.success(f"🎉 {tot_prem} aposta(s) premiada(s) encontradas no arquivo!")
+                    st.success(f"{tot_prem} aposta(s) premiada(s) encontradas!")
                     jogos_premiados_txt = "\n".join([
                         f"{' '.join([f'{n:02d}' for n in it['jogo']])} | {it['qtd_acertos']} ACERTOS"
                         for it in relatorio_conf if it["qtd_acertos"] >= 4
                     ])
                     st.download_button(
-                        "📥 Baixar Apostas Premiadas (.TXT)",
+                        "📥 BAIXAR APOSTAS PREMIADAS (.TXT)",
                         data=jogos_premiados_txt,
                         file_name=f"mega60_apostas_premiadas_{tot_prem}.txt",
                         mime="text/plain",
                         use_container_width=True
                     )
                 else:
-                    st.warning("Nenhuma aposta alcançou 4, 5 ou 6 acertos neste sorteio.")
+                    st.warning("Nenhuma aposta alcançou 4, 5 ou 6 acertos.")
 
                 jogos_com_acerto = [it for it in relatorio_conf if it["qtd_acertos"] >= 4] or relatorio_conf
                 opcoes_map = {
@@ -1530,7 +1489,7 @@ with tab_upload:
                     for it in jogos_com_acerto[:50]
                 }
                 idx_escolhido = st.selectbox(
-                    "Inspecionar Aposta no Volante:",
+                    "Inspecionar no Volante:",
                     list(opcoes_map.keys()),
                     format_func=lambda x: opcoes_map[x]
                 )
@@ -1539,20 +1498,20 @@ with tab_upload:
                     render_volante_conferencia(
                         item_ativo["jogo"],
                         dezenas_conf,
-                        titulo=f"Volante: Aposta #{item_ativo['num_aposta']:04d} ({item_ativo['qtd_acertos']} Acertos)"
+                        titulo=f"Aposta #{item_ativo['num_aposta']:04d} ({item_ativo['qtd_acertos']} Acertos)"
                     )
     else:
-        st.info("Envie um arquivo de apostas no topo da página para iniciar a filtragem em lote e conferência.")
+        st.info("Carregue um arquivo para conferência.")
 
 # ==============================================================================
 # ABA 5: HISTÓRICO & API CAIXA
 # ==============================================================================
 with tab_historico:
-    st.subheader("Base de Sorteios Oficiais")
-    st.markdown(f"**Concursos ativos em memória:** `{len(st.session_state.historico)}` ({st.session_state.origem})")
+    st.subheader("BASE DE CONCURSOS OFICIAIS")
+    st.markdown(f"**Total em memória:** `{len(st.session_state.historico)}` ({st.session_state.origem})")
 
-    if st.button("🌐 Sincronizar Histórico com a Caixa Agora", type="primary"):
-        with st.spinner("Conectando aos servidores da Caixa..."):
+    if st.button("🌐 SINCRONIZAR COM A CAIXA AGORA", type="primary"):
+        with st.spinner("Conectando..."):
             try:
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1577,12 +1536,12 @@ with tab_historico:
                         st.success(f"Concurso #{ult.get('numero')} sincronizado: {' - '.join([f'{n:02d}' for n in dezenas_sorteadas])}")
                         st.rerun()
                     else:
-                        st.warning("Formato inesperado no retorno da API da Caixa.")
+                        st.warning("Formato inesperado.")
                 else:
-                    st.warning(f"Servidor da Caixa retornou código HTTP {r.status_code}.")
+                    st.warning(f"Erro HTTP {r.status_code}.")
             except Exception as e:
-                st.error(f"Erro ao conectar com a API: {e}")
+                st.error(f"Erro: {e}")
 
-    with st.expander("Ver Concursos Armazenados na Sessão"):
+    with st.expander("Ver Concursos Armazenados"):
         for i, sorteio in enumerate(reversed(st.session_state.historico), start=1):
-            st.markdown(f"**Concurso recente #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorted(sorteio)])}`")
+            st.markdown(f"**Concurso #{i:02d}:** `{' - '.join([f'{n:02d}' for n in sorted(sorteio)])}`")
