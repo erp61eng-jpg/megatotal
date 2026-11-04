@@ -114,7 +114,85 @@ PRESETS_PADRAO = {
 }
 
 # ==============================================================================
-# ENGENHARIA REVERSA: EXTRAÇÃO INDIVIDUAL E MULTICONCURSOS
+# MOTOR TÉRMICO DE ELLIOTT & SELEÇÃO DE ELITE
+# ==============================================================================
+def calcular_metricas_elliott(historico):
+    total = len(historico)
+    atrasos = {n: total for n in range(1, 61)}
+    freq_5 = {n: 0 for n in range(1, 61)}
+    freq_15 = {n: 0 for n in range(1, 61)}
+
+    for idx_rev, sorteio in enumerate(reversed(historico)):
+        for n in sorteio:
+            if atrasos[n] == total:
+                atrasos[n] = idx_rev
+            if idx_rev < 5:
+                freq_5[n] += 1
+            if idx_rev < 15:
+                freq_15[n] += 1
+
+    dados = {}
+    for n in range(1, 61):
+        atr = atrasos[n]
+        dist_fib = min(abs(atr - f) for f in [1, 2, 3, 5, 8, 13, 21])
+        score_retracao = max(0.0, 10.0 - (dist_fib * 2.2))
+        score_impulso = (freq_5[n] * 6.5) + (freq_15[n] * 2.5)
+        score_fib = 3.5 if PROPS[n]["is_fib"] else 0.0
+        penalidade = -4.0 if atr > 21 else 0.0
+
+        score_total = max(0.0, score_retracao + score_impulso + score_fib + penalidade)
+        fase_nome = "Impulso (Onda 3)" if freq_5[n] >= 2 else ("Retração Ótima" if dist_fib <= 1 else "Acumulação")
+
+        dados[n] = {
+            "numero": n,
+            "score": round(score_total, 1),
+            "atraso": atr,
+            "fase": fase_nome,
+            "is_fib": PROPS[n]["is_fib"],
+            "is_primo": PROPS[n]["is_primo"],
+            "is_par": PROPS[n]["is_par"],
+            "dc": PROPS[n]["dc"],
+            "dd": PROPS[n]["dd"]
+        }
+
+    return dados
+
+def extrair_analise_elite(dados_calor):
+    ranking = sorted(dados_calor.values(), key=lambda x: x["score"], reverse=True)
+    
+    # Melhores Primos (Top 5)
+    melhores_primos = [x["numero"] for x in ranking if x["is_primo"]][:5]
+    
+    # 3 Melhores Pares
+    melhores_pares = [x["numero"] for x in ranking if x["is_par"]][:3]
+    
+    # Melhores Ímpares (Top 5)
+    melhores_impares = [x["numero"] for x in ranking if not x["is_par"]][:5]
+    
+    # Ranking de Diagonais por Score Agregado
+    dc_scores = {d: 0.0 for d in range(10)}
+    dd_scores = {d: 0.0 for d in range(10)}
+    for n, val in dados_calor.items():
+        dc_scores[val["dc"]] += val["score"]
+        dd_scores[val["dd"]] += val["score"]
+        
+    melhores_dc = sorted(dc_scores.keys(), key=lambda d: dc_scores[d], reverse=True)[:3]
+    melhores_dd = sorted(dd_scores.keys(), key=lambda d: dd_scores[d], reverse=True)[:3]
+    
+    # Pool Consolidado das Elites (sem duplicatas, ordenado)
+    pool_elite = sorted(list(set(melhores_primos) | set(melhores_pares) | set(melhores_impares)))
+    
+    return {
+        "primos": melhores_primos,
+        "pares": melhores_pares,
+        "impares": melhores_impares,
+        "dc": melhores_dc,
+        "dd": melhores_dd,
+        "pool_elite": pool_elite
+    }
+
+# ==============================================================================
+# ENGENHARIA REVERSA & FILTROS
 # ==============================================================================
 def mapear_quantidade_para_rotulo(qtd, modo="exato"):
     if modo == "exato":
@@ -323,49 +401,10 @@ def extrair_filtros_multiconcursos(lista_sorteios, modo="preciso"):
     }
 
 # ==============================================================================
-# MOTOR TÉRMICO DE ELLIOTT
-# ==============================================================================
-def calcular_metricas_elliott(historico):
-    total = len(historico)
-    atrasos = {n: total for n in range(1, 61)}
-    freq_5 = {n: 0 for n in range(1, 61)}
-    freq_15 = {n: 0 for n in range(1, 61)}
-
-    for idx_rev, sorteio in enumerate(reversed(historico)):
-        for n in sorteio:
-            if atrasos[n] == total:
-                atrasos[n] = idx_rev
-            if idx_rev < 5:
-                freq_5[n] += 1
-            if idx_rev < 15:
-                freq_15[n] += 1
-
-    dados = {}
-    for n in range(1, 61):
-        atr = atrasos[n]
-        dist_fib = min(abs(atr - f) for f in [1, 2, 3, 5, 8, 13, 21])
-        score_retracao = max(0.0, 10.0 - (dist_fib * 2.2))
-        score_impulso = (freq_5[n] * 6.5) + (freq_15[n] * 2.5)
-        score_fib = 3.5 if PROPS[n]["is_fib"] else 0.0
-        penalidade = -4.0 if atr > 21 else 0.0
-
-        score_total = max(0.0, score_retracao + score_impulso + score_fib + penalidade)
-        fase_nome = "Impulso (Onda 3)" if freq_5[n] >= 2 else ("Retração Ótima" if dist_fib <= 1 else "Acumulação")
-
-        dados[n] = {
-            "numero": n,
-            "score": round(score_total, 1),
-            "atraso": atr,
-            "fase": fase_nome,
-            "is_fib": PROPS[n]["is_fib"]
-        }
-
-    return dados
-
-# ==============================================================================
-# MOTOR COMBINATÓRIO & FILTRAGEM
+# MOTOR COMBINATÓRIO OTIMIZADO
 # ==============================================================================
 def validar_aposta_final_6(jogo, cfg):
+    # jogo já é uma tupla ordenada do menor para o maior
     soma_j = jogo[0] + jogo[1] + jogo[2] + jogo[3] + jogo[4] + jogo[5]
     if not (cfg["faixa_soma"][0] <= soma_j <= cfg["faixa_soma"][1]):
         return False
@@ -451,12 +490,12 @@ def executar_varredura_pool(pool_dezenas, cfg, bar_progresso, container_status, 
     testadas = 0
     t_ultimo_update = 0.0
 
+    # combinations em dezenas_candidatas já gera jogos rigorosamente ordenados do menor para o maior
     for comb in combinations(dezenas_candidatas, 6):
         testadas += 1
-        comb_ordenada = sorted(comb)
 
-        if validar_aposta_final_6(comb_ordenada, cfg):
-            jogos_aprovados.append(comb_ordenada)
+        if validar_aposta_final_6(comb, cfg):
+            jogos_aprovados.append(list(comb))
             if teto_max is not None and len(jogos_aprovados) >= teto_max:
                 break
 
@@ -597,6 +636,8 @@ ranking_elliott = sorted(dados_calor.values(), key=lambda x: x["score"], reverse
 top_40_dezenas = {item["numero"] for item in ranking_elliott[:40]}
 pool_inicial = top_40_dezenas | DEZENAS_BASE_3010
 
+analise_elite = extrair_analise_elite(dados_calor)
+
 if "pool_trabalho" not in st.session_state or not isinstance(st.session_state.pool_trabalho, set):
     st.session_state.pool_trabalho = pool_inicial.copy()
 
@@ -654,7 +695,7 @@ st.title("🍀 MEGA60: Cartela de Calor Elliott & Filtros Matriciais")
 st.caption("Matriz 6x10 • Engenharia Reversa Multiconcursos • Motor Combinatório Completo")
 
 tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
-    "🎟️ Cartela Térmica (Pool Ativo)",
+    "🎟️ Cartela Térmica & Seleção Elite",
     "🎛️ Filtros & Engenharia Reversa",
     "🗺️ Volante & Raio-X",
     "📥 Upload & Filtragem Sucessiva",
@@ -662,11 +703,71 @@ tab_cartela, tab_config, tab_volante, tab_upload, tab_historico = st.tabs([
 ])
 
 # ==============================================================================
-# ABA 1: CARTELA TÉRMICA DE ELLIOTT
+# ABA 1: CARTELA TÉRMICA DE ELLIOTT & PAINEL DE ELITE
 # ==============================================================================
 with tab_cartela:
-    st.subheader("🎟️ Cartela de Calor Interativa (Matriz 6x10)")
-    st.markdown("Selecione os números que formarão a base do pool de combinações:")
+    # -------------------------------------------------------------
+    # SEÇÃO NOVA: MELHORES NÚMEROS E CONDICIONANTES SEPARADAS
+    # -------------------------------------------------------------
+    with st.container(border=True):
+        st.markdown("### 🏆 Raio-X de Elite: Melhores Primos, Pares, Ímpares e Diagonais")
+        st.caption("Estatísticas calculadas pelo Motor Térmico de Ondas de Elliott sobre os concursos ativos.")
+
+        c_el1, c_el2, c_el3, c_el4 = st.columns(4)
+
+        with c_el1:
+            st.markdown("#### 💎 Melhores Primos")
+            p_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["primos"]])
+            st.markdown(p_txt)
+
+        with c_el2:
+            st.markdown("#### ⚖️ 3 Melhores Pares")
+            pa_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["pares"]])
+            st.markdown(pa_txt)
+
+        with c_el3:
+            st.markdown("#### ⚡ Melhores Ímpares")
+            i_txt = " • ".join([f"`{n:02d}` ({dados_calor[n]['score']}p)" for n in analise_elite["impares"]])
+            st.markdown(i_txt)
+
+        with c_el4:
+            st.markdown("#### 📐 Melhores Diagonais")
+            dc_txt = ", ".join([f"DC{d+1:02d}" for d in analise_elite["dc"]])
+            dd_txt = ", ".join([f"DD{d+1:02d}" for d in analise_elite["dd"]])
+            st.markdown(f"**Crescentes (/):** `{dc_txt}`")
+            st.markdown(f"**Decrescentes (\\):** `{dd_txt}`")
+
+        st.divider()
+
+        pool_elite_ordenado = analise_elite["pool_elite"]
+        dezenas_elite_txt = " - ".join([f"{n:02d}" for n in pool_elite_ordenado])
+        st.markdown(
+            f"🎯 **Pool Consolidado das Elites ({len(pool_elite_ordenado)} dezenas agrupadas):** "
+            f"<code style='color:#15803d;font-size:13px;font-weight:bold;'>{dezenas_elite_txt}</code>",
+            unsafe_allow_html=True
+        )
+
+        c_act1, c_act2 = st.columns([1, 1])
+        with c_act1:
+            if st.button("⭐ Carregar Somente Este Pool de Elite na Cartela", use_container_width=True, type="primary"):
+                st.session_state.pool_trabalho = set(pool_elite_ordenado)
+                st.rerun()
+
+        with c_act2:
+            if st.button("🎛️ Gerar e Ativar Filtro Baseado Nestas Condicionantes", use_container_width=True):
+                preset_elite = extrair_filtros_de_jogo(pool_elite_ordenado, modo="flexivel")
+                st.session_state.presets_filtros["FILTRO_ELITE_CONDICIONANTES"] = preset_elite
+                aplicar_preset("FILTRO_ELITE_CONDICIONANTES")
+                st.success("Filtro 'FILTRO_ELITE_CONDICIONANTES' ativado na Aba 2!")
+                st.rerun()
+
+    st.write("")
+
+    # -------------------------------------------------------------
+    # CARTELA VIRTUAL 6x10
+    # -------------------------------------------------------------
+    st.subheader("🎟️ Cartela Interativa de 60 Números (Matriz 6x10)")
+    st.markdown("Dezenas identificadas nas **Elites** recebem a estrela `⭐`. Clique para ativar/desativar dezenas no pool:")
 
     c_b1, c_b2, c_b3, c_b4, c_b5 = st.columns(5)
     with c_b1:
@@ -692,6 +793,8 @@ with tab_cartela:
 
     st.write("")
 
+    set_elite = set(analise_elite["pool_elite"])
+
     for r in range(6):
         cols = st.columns(10)
         for c in range(10):
@@ -699,9 +802,12 @@ with tab_cartela:
             meta = dados_calor[n]
             estilo = obter_estilo_calor(meta["score"])
             esta_ativa = n in st.session_state.pool_trabalho
+            e_elite = n in set_elite
+
             tipo_btn = "primary" if esta_ativa else "secondary"
             check_ico = "🟢" if esta_ativa else "⚪"
-            rotulo = f"{check_ico} {n:02d}\n{estilo['icone']}{meta['score']:.0f}p"
+            star_ico = "⭐" if e_elite else ""
+            rotulo = f"{check_ico}{star_ico} {n:02d}\n{estilo['icone']}{meta['score']:.0f}p"
 
             with cols[c]:
                 if st.button(rotulo, key=f"btn_num_{n}", type=tipo_btn, use_container_width=True):
@@ -713,11 +819,12 @@ with tab_cartela:
     qtd_sel = len(st.session_state.pool_trabalho)
     with col_inf1:
         st.markdown(
-            "**Classificação Térmica:** &nbsp; "
-            "<span style='color:#dc2626;font-weight:700;'>🔥 Ultra Quente (Onda 3)</span> &nbsp;|&nbsp; "
-            "<span style='color:#ea580c;font-weight:700;'>☀️ Quente (Retração Fib)</span> &nbsp;|&nbsp; "
-            "<span style='color:#ca8a04;font-weight:700;'>🌤️ Morno (Acumulação)</span> &nbsp;|&nbsp; "
-            "<span style='color:#64748b;font-weight:700;'>❄️ Frio (Repouso)</span>",
+            "**Legenda da Matriz:** &nbsp; "
+            "⭐ = Dezena Elite &nbsp;|&nbsp; "
+            "<span style='color:#dc2626;font-weight:700;'>🔥 Onda 3</span> &nbsp;|&nbsp; "
+            "<span style='color:#ea580c;font-weight:700;'>☀️ Retração Fib</span> &nbsp;|&nbsp; "
+            "<span style='color:#ca8a04;font-weight:700;'>🌤️ Acumulação</span> &nbsp;|&nbsp; "
+            "<span style='color:#64748b;font-weight:700;'>❄️ Repouso</span>",
             unsafe_allow_html=True
         )
         dezenas_txt = " - ".join([f"{n:02d}" for n in sorted(list(st.session_state.pool_trabalho))])
@@ -1135,8 +1242,7 @@ with tab_config:
                 dezenas_cands = sorted(list(st.session_state.pool_trabalho))
                 buffer_txt = io.StringIO()
                 for c in combinations(dezenas_cands, 6):
-                    c_ord = sorted(c)
-                    buffer_txt.write(" ".join([f"{n:02d}" for n in c_ord]) + "\n")
+                    buffer_txt.write(" ".join([f"{n:02d}" for n in c]) + "\n")
                 st.session_state["raw_pool_file"] = buffer_txt.getvalue()
                 st.success(f"Pool bruto de {comb_totais_pool:,} combinações gerado na memória!")
 
@@ -1152,7 +1258,7 @@ with tab_config:
     if st.session_state.jogos_aprovados:
         qtd_aprov = len(st.session_state.jogos_aprovados)
         st.success(f"🎯 **Total Aprovado:** {qtd_aprov:,} apostas oficiais geradas (ordenadas do menor para o maior).")
-        txt_saida = "\n".join([" ".join([f"{n:02d}" for n in sorted(j)]) for j in st.session_state.jogos_aprovados])
+        txt_saida = "\n".join([" ".join([f"{n:02d}" for n in j]) for j in st.session_state.jogos_aprovados])
 
         c_d1, c_d2 = st.columns([3, 1])
         with c_d1:
@@ -1243,7 +1349,6 @@ with tab_upload:
         total_up = len(jogos_up)
         st.success(f"✅ **Arquivo Carregado:** **{total_up:,} apostas oficiais** prontas em memória.")
 
-        # SEÇÃO DE RE-FILTRAGEM DO ARQUIVO CARREGADO
         with st.container(border=True):
             st.markdown("#### ⚡ Filtrar Arquivo Carregado pelos Filtros da Aba 2")
             st.caption("Passe o lote carregado pelo pente-fino das regras configuradas atualmente (Linhas, Colunas, Diagonais, Soma, Primos, Moldura e Pares).")
@@ -1254,7 +1359,7 @@ with tab_upload:
                     with st.spinner("Filtrando apostas carregadas..."):
                         t_ini_flt = time.time()
                         aprovados_do_arquivo = [
-                            sorted(j) for j in jogos_up if validar_aposta_final_6(sorted(j), config_total)
+                            j for j in jogos_up if validar_aposta_final_6(tuple(j), config_total)
                         ]
                         t_fim_flt = time.time() - t_ini_flt
                         st.session_state.jogos_filtrados_upload = aprovados_do_arquivo
